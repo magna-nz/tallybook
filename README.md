@@ -10,27 +10,25 @@
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   </p>
   <p>
-    <a href="#-install">Install</a> ·
-    <a href="#-use">Use</a> ·
-    <a href="#-what-it-finds">Findings</a> ·
+    <a href="#install">Install</a> ·
+    <a href="#use">Use</a> ·
+    <a href="#what-it-finds">Findings</a> ·
     <a href="docs/DESIGN.md">Design</a>
   </p>
 </div>
 
 <br />
 
-## 🤔 Why
+## Why
 
 You run Claude Code or Codex for hours and all you see at the end is a bill or a rate-limit
-warning. `ccusage` tells you how much. Tallybook tells you what for, and what it would have cost
-on a cheaper choice.
+warning. Tallybook prices every session from the transcripts already on your disk, shows what the
+money went on, and what it would have cost on a cheaper choice.
 
-It reads the transcripts your agents already write to disk. No proxy, no API key, nothing leaves
-your machine. The first run covers every session you already have.
+No proxy, no API key, nothing leaves your machine. The first run covers every session you already
+have.
 
-> A *tally book* is the pocket ledger a rancher counts the herd in.
-
-## 👀 What it looks like
+## What it looks like
 
 ```
 $ tallybook
@@ -75,36 +73,7 @@ Read-only sub-agents ran on Opus                          saves about $58.00/mon
 
 Numbers are illustrative. On a Max or Pro plan the dollar column becomes share of your usage.
 
-## ✨ What it finds
-
-| Finding | What it means | What to do |
-|---|---|---|
-| 🔍 Read-only sub-agent on a strong model | An agent that only read and searched ran on Opus | Set `model: sonnet` in its agent file |
-| 🎯 Requested model not honoured | You asked for Sonnet, the agent ran on Opus | Remove the `model:` line that overrides the call |
-| 🧠 Cache rebuilt mid-session | A long pause expired the prompt cache and the whole conversation was re-billed | Use the one-hour cache setting |
-| 📦 Tool output filling context | Command output and file dumps are re-sent on every turn | Trim output with `tail`, or read big files in a sub-agent |
-| 🔁 Retry loops | The same action kept failing | Do **not** downgrade these. Give the agent a better brief |
-| 💭 Thinking on relay turns | Reasoning tokens spent on turns that only call the next tool | Set `effort: low` on that agent |
-
-Every finding has four parts: what happened, why it costs money, what to change, what to
-expect. The change names the file and the line. `--patch` prints it as a diff. Tallybook never
-edits your config.
-
-## 📦 Install
-
-```sh
-brew install --cask magna-nz/tap/tallybook
-```
-
-Or:
-
-```sh
-go install github.com/magna-nz/tallybook/cmd/tallybook@latest
-```
-
-Needs Claude Code or Codex CLI with sessions in their default folders. macOS or Linux. No API key.
-
-## 🚀 Use
+## Use
 
 | Command | Example |
 |---|---|
@@ -126,13 +95,37 @@ Needs Claude Code or Codex CLI with sessions in their default folders. macOS or 
 The plan is read from Claude Code's login. Force it with `--currency usd|share` or
 `plan = "api"` / `plan = "subscription"` in the config.
 
-## 🔒 Privacy
+## What it finds
+
+Six checks: sub-agents that only read files but ran on an expensive model, a requested model that
+was not honoured, a prompt cache that expired mid-session, command output crowding the context,
+retry loops that should not be downgraded, and thinking spent on turns that only call a tool.
+
+Every finding has four parts: what happened, why it costs money, what to change, what to expect.
+The change names the file and the line. `--patch` prints it as a diff. Tallybook never edits your
+config.
+
+## Install
+
+```sh
+brew install --cask magna-nz/tap/tallybook
+```
+
+Or:
+
+```sh
+go install github.com/magna-nz/tallybook/cmd/tallybook@latest
+```
+
+Needs Claude Code or Codex CLI with sessions in their default folders. macOS or Linux. No API key.
+
+## Privacy
 
 Read-only. Stores token counts, tool names, models, timestamps and project paths in
 `~/.config/tallybook/tallybook.db`. Never stores prompt text, tool output or command lines. No
 network calls.
 
-## 🛠️ Development
+## Development
 
 ```sh
 go run ./cmd/tallybook --since 7d
@@ -151,7 +144,7 @@ go run ./cmd/tallybook --since all
 Release: push a `v*` tag. Needs a `HOMEBREW_TAP_TOKEN` secret with write access to
 `magna-nz/homebrew-tap`.
 
-## 📚 Documentation
+## Documentation
 
 * [`docs/DESIGN.md`](docs/DESIGN.md) — parsing rules, pricing formula, what is stored.
 * Prices verified 2026-09-10. `tallybook prices` shows the table.
