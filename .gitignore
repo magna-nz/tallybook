@@ -3,3 +3,4 @@
 *.db
 *.db-journal
 .DS_Store
+/cmd/parsecheck/
