@@ -74,7 +74,9 @@ func Report(w io.Writer, d ReportData) error {
 		}
 	}
 	fmt.Fprintln(bw)
-	fmt.Fprintln(bw, "Run `tallybook finding <n>` for evidence and the change to make.")
+	if len(d.Findings) > 0 {
+		fmt.Fprintln(bw, "Run `tallybook finding <n>` for evidence and the change to make.")
+	}
 	if len(d.Findings) > 1 {
 		fmt.Fprintln(bw, "Savings are estimated one finding at a time. Where two touch the same runs")
 		fmt.Fprintln(bw, "they overlap, so they do not add up.")

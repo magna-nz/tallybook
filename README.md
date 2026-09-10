@@ -193,6 +193,39 @@ never stores prompt text or tool-result text. Shell commands are classified as r
 the file is being parsed and the command line itself is thrown away. It makes no network calls at
 all.
 
+## 🛠️ Development
+
+Go 1.27 or newer is the only requirement.
+
+```sh
+go run ./cmd/tallybook --since 7d
+```
+
+Point it at the checked-in fixtures instead of your own transcripts, with a throwaway database, to
+see it work without touching anything under your home directory:
+
+```sh
+TALLYBOOK_DIR=/tmp/tb \
+TALLYBOOK_CLAUDE_ROOTS=$PWD/internal/transcript/claude/testdata/projects \
+TALLYBOOK_CODEX_ROOTS=$PWD/internal/transcript/codex/testdata/sessions \
+go run ./cmd/tallybook --since all
+```
+
+Run the tests, which cover the parsers, the store, pricing, every finding rule, the report layout
+and the CLI end to end:
+
+```sh
+go test ./...
+```
+
+The fixtures under `internal/transcript/*/testdata` are hand-written, not real sessions. To check
+a change against your own history, build the binary and run it with `TALLYBOOK_DIR` pointed at a
+scratch directory so your real database is left alone.
+
+To cut a release: push a tag like `v0.1.0`. The release workflow builds macOS and Linux binaries
+for both architectures and updates the Homebrew tap. It needs a `HOMEBREW_TAP_TOKEN` repository
+secret with write access to `magna-nz/homebrew-tap`.
+
 ## 📚 Documentation
 
 * [docs/DESIGN.md](docs/DESIGN.md) — parsing rules for Claude Code and Codex transcripts, and the
