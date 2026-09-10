@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/magna-nz/tallybook/internal/config"
@@ -40,16 +42,26 @@ func Report(w io.Writer, d ReportData) error {
 		d.Sessions, d.Subagents, dateRange(d.Earliest, d.Latest))
 
 	title := windowTitle(d.SinceFlag, d.Window.Label)
-	fmt.Fprintf(bw, "%-32s%10s%10s\n", title, moneyHeader(d.Plan), "share")
+	fmt.Fprintf(bw, "%-30s%18s%8s\n", title, moneyHeader(d.Plan), "share")
 
 	var mainShare, subShare float64
 	if d.Totals.USD > 0 {
 		mainShare = d.Totals.MainUSD / d.Totals.USD
 		subShare = d.Totals.SubagentUSD / d.Totals.USD
 	}
-	fmt.Fprintf(bw, "%-32s%10s%10s\n", "  Total", fmtUSD(d.Totals.USD), share(1))
-	fmt.Fprintf(bw, "%-32s%10s%10s\n", "  Main session turns", fmtUSD(d.Totals.MainUSD), share(mainShare))
-	fmt.Fprintf(bw, "%-32s%10s%10s\n", "  Sub-agents", fmtUSD(d.Totals.SubagentUSD), share(subShare))
+	fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Total", fmtUSD(d.Totals.USD), share(1))
+	fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Main session turns", fmtUSD(d.Totals.MainUSD), share(mainShare))
+	fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Sub-agents", fmtUSD(d.Totals.SubagentUSD), share(subShare))
+	if n := len(d.Totals.UnknownModels); n > 0 {
+		var ids []string
+		var turns int
+		for id, c := range d.Totals.UnknownModels {
+			ids = append(ids, id)
+			turns += c
+		}
+		sort.Strings(ids)
+		fmt.Fprintf(bw, "  Not priced: %d turns on %s (no price on file; add one under [prices] in config.toml)\n", turns, strings.Join(ids, ", "))
+	}
 	fmt.Fprintln(bw)
 
 	if len(d.Findings) == 0 {
@@ -63,6 +75,10 @@ func Report(w io.Writer, d ReportData) error {
 	}
 	fmt.Fprintln(bw)
 	fmt.Fprintln(bw, "Run `tallybook finding <n>` for evidence and the change to make.")
+	if len(d.Findings) > 1 {
+		fmt.Fprintln(bw, "Savings are estimated one finding at a time. Where two touch the same runs")
+		fmt.Fprintln(bw, "they overlap, so they do not add up.")
+	}
 
 	if d.SkippedFiles > 0 {
 		fmt.Fprintf(bw, "Skipped %d files that could not be read (tallybook status shows them).\n", d.SkippedFiles)

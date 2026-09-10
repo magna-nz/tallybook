@@ -165,7 +165,7 @@ func requestedWhyItCosts(in Input, found []mismatch, saving float64) string {
 			ratio = fmt.Sprintf("about %sx", fmtOneDP(paid/asked))
 		}
 		return fmt.Sprintf("You made the right call and it was ignored, so those runs cost %s what you intended: "+
-			"%s instead of %s.", ratio, fmtUSD(paid), fmtUSD(asked))
+			"%s instead of %s at list price.", ratio, fmtUSD(paid), fmtUSD(asked))
 	}
 	ratio := "less than"
 	if asked > 0 {

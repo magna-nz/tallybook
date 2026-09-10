@@ -43,6 +43,10 @@ func Finding(w io.Writer, f findings.Finding, index int, mode FindingMode) error
 	writeSection(bw, "  What to expect", f.WhatToExpect)
 
 	if mode.Evidence {
+		if mode.Plan == config.PlanSubscription {
+			fmt.Fprintln(bw, "  Costs below are list-price equivalents, not what you paid.")
+			fmt.Fprintln(bw)
+		}
 		writeEvidence(bw, f.Evidence)
 	}
 

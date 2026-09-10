@@ -194,12 +194,15 @@ func Parse(path string) (*model.Transcript, error) {
 			if err := json.Unmarshal(rec.Message, &am); err != nil || am.ID == "" {
 				continue
 			}
+			if am.Model == "<synthetic>" {
+				continue // a locally generated notice (API error, sleep, etc.), no tokens involved
+			}
 			b, ok := byMsgID[am.ID]
 			if !ok {
+				// message.id is unique per API response; requestId is not
+				// guaranteed to be (a retried request can reuse it), so the
+				// message id is the turn key.
 				b = &turnBuilder{id: am.ID, model: am.Model, effort: rec.Effort}
-				if rec.RequestID != "" {
-					b.id = rec.RequestID
-				}
 				byMsgID[am.ID] = b
 				order = append(order, am.ID)
 			}
@@ -238,6 +241,11 @@ func Parse(path string) (*model.Transcript, error) {
 							}
 						} else {
 							tc.Agent = &model.AgentLaunch{}
+						}
+					}
+					if block.ID != "" {
+						if _, dup := toolIndex[block.ID]; dup {
+							tc.ID = fmt.Sprintf("%s#%d", block.ID, len(toolIndex))
 						}
 					}
 					b.toolCalls = append(b.toolCalls, tc)
@@ -292,6 +300,11 @@ func Parse(path string) (*model.Transcript, error) {
 		return nil, fmt.Errorf("claude: %s: no usable records", path)
 	}
 
+	if isSubAgent && sess.AgentID == "" {
+		// Older sub-agent files carry no agentId field; the file name does.
+		base := strings.TrimSuffix(filepath.Base(path), ".jsonl")
+		sess.AgentID = strings.TrimPrefix(base, "agent-")
+	}
 	if isSubAgent {
 		sess.ParentSessionID = sessionID
 		sess.ID = sessionID + "/agent-" + sess.AgentID

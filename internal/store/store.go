@@ -213,7 +213,7 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 	}
 
 	turnStmt, err := tx.Prepare(`
-		INSERT INTO turns(session_id, id, ts, model, effort, input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars)
+		INSERT OR REPLACE INTO turns(session_id, id, ts, model, effort, input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("store: prepare turn insert: %w", err)
@@ -221,7 +221,7 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 	defer turnStmt.Close()
 
 	toolCallStmt, err := tx.Prepare(`
-		INSERT INTO tool_calls(session_id, turn_id, id, name, input_chars, class)
+		INSERT OR REPLACE INTO tool_calls(session_id, turn_id, id, name, input_chars, class)
 		VALUES (?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("store: prepare tool_call insert: %w", err)
@@ -229,7 +229,7 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 	defer toolCallStmt.Close()
 
 	launchStmt, err := tx.Prepare(`
-		INSERT INTO agent_launches(session_id, tool_call_id, subagent_type, requested_model, resolved_model, agent_id, description)
+		INSERT OR REPLACE INTO agent_launches(session_id, tool_call_id, subagent_type, requested_model, resolved_model, agent_id, description)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("store: prepare agent_launch insert: %w", err)
@@ -254,7 +254,7 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 			if tc.Agent != nil {
 				_, err = launchStmt.Exec(
 					newSessionID, tc.ID, tc.Agent.SubagentType, tc.Agent.RequestedModel,
-					tc.Agent.ResolvedModel, tc.Agent.AgentID, tc.Agent.Description,
+					tc.Agent.ResolvedModel, tc.Agent.AgentID, "", // task briefs are prompt text and are never stored
 				)
 				if err != nil {
 					return fmt.Errorf("store: insert agent_launch %s: %w", tc.ID, err)
@@ -337,11 +337,13 @@ func toUnixNanos(t time.Time) int64 {
 
 // fromUnixNanos converts unix nanoseconds back to a time.Time, returning the
 // zero time for 0.
+// Times come back in the local zone so dates in reports match the clock the
+// user was looking at.
 func fromUnixNanos(n int64) time.Time {
 	if n == 0 {
 		return time.Time{}
 	}
-	return time.Unix(0, n).UTC()
+	return time.Unix(0, n)
 }
 
 // uniqueNonEmpty returns the distinct, non-empty strings among ids.

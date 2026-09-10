@@ -44,6 +44,14 @@ and what a cheaper choice would have cost. Nothing is sent anywhere.
   `custom_tool_call_output`, linked by `call_id`. `output` may be a string or
   an object with `body` and `success`.
 
+## What is stored
+
+Token counts, model ids, tool names, tool-call classes (read/write), result
+sizes, timestamps, session and project paths. Never prompt text, tool-result
+text, command lines, or sub-agent task briefs: the parser reads the Agent
+call's description to build the launch record, but the store writes it as an
+empty string.
+
 ## Pricing
 
 A dated table per vendor. Cost per turn is

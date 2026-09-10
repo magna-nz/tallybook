@@ -37,7 +37,7 @@ func ParseSince(s string, now time.Time) (Window, error) {
 		return Window{Since: time.Time{}, Until: now, Days: 0, Label: "all time"}, nil
 	}
 
-	t, err := time.Parse("2006-01-02", s)
+	t, err := time.ParseInLocation("2006-01-02", s, now.Location())
 	if err != nil {
 		return Window{}, fmt.Errorf("ledger: invalid --since %q: want 7d, 30d, 90d, all, or YYYY-MM-DD", s)
 	}

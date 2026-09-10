@@ -65,7 +65,7 @@ func TestParseSession(t *testing.T) {
 		t.Fatalf("got %d turns, want 4: %+v", len(tr.Turns), tr.Turns)
 	}
 
-	msg1 := findTurn(t, tr.Turns, "req_1")
+	msg1 := findTurn(t, tr.Turns, "msg_1")
 	if msg1.Usage.Input != 2 {
 		t.Errorf("msg_1 Input = %d, want 2", msg1.Usage.Input)
 	}
@@ -85,7 +85,7 @@ func TestParseSession(t *testing.T) {
 		t.Errorf("msg_1 ToolCalls = %+v, want exactly one Read", msg1.ToolCalls)
 	}
 
-	msg2 := findTurn(t, tr.Turns, "req_2")
+	msg2 := findTurn(t, tr.Turns, "msg_2")
 	if len(msg2.ToolCalls) != 1 {
 		t.Fatalf("msg_2 ToolCalls = %+v, want exactly one", msg2.ToolCalls)
 	}

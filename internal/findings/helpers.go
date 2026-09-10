@@ -267,14 +267,17 @@ func windowUntil(in Input) time.Time {
 // windowPhrase describes the reporting window in a sentence, e.g. "in the
 // last 30 days" or "between 11 Aug and 10 Sep 2026".
 func windowPhrase(in Input) string {
-	if !in.Filter.Since.IsZero() {
-		return fmt.Sprintf("between %s and %s",
-			in.Filter.Since.Format("2 Jan"), windowUntil(in).Format("2 Jan 2006"))
+	days := int64(in.WindowDays + 0.5)
+	switch {
+	case in.Filter.Since.IsZero() && days > 0:
+		return fmt.Sprintf("across the %s days of history on this machine", fmtInt(days))
+	case in.Filter.Since.IsZero():
+		return "in this window"
+	case days == 7 || days == 30 || days == 90:
+		return fmt.Sprintf("in the last %d days", days)
+	default:
+		return fmt.Sprintf("since %s", in.Filter.Since.Format("2 Jan 2006"))
 	}
-	if in.WindowDays > 0 {
-		return fmt.Sprintf("in the last %s days", fmtInt(int64(in.WindowDays+0.5)))
-	}
-	return "in this window"
 }
 
 // fmtUSD renders a dollar figure the way a bill does: "$1,234.56", "$0.40".

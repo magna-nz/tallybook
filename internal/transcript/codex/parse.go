@@ -289,6 +289,9 @@ func Parse(path string) (*model.Transcript, error) {
 				if p.CallID != nil {
 					id = *p.CallID
 				}
+				if id == "" {
+					id = fmt.Sprintf("local_shell-%d", len(pendingCalls)+1)
+				}
 				pendingCalls = append(pendingCalls, model.ToolCall{
 					ID:         id,
 					Name:       "local_shell",
