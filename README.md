@@ -97,10 +97,6 @@ The plan is read from Claude Code's login. Force it with `--currency usd|share` 
 
 ## What it finds
 
-Six checks: sub-agents that only read files but ran on an expensive model, a requested model that
-was not honoured, a prompt cache that expired mid-session, command output crowding the context,
-retry loops that should not be downgraded, and thinking spent on turns that only call a tool.
-
 Every finding has four parts: what happened, why it costs money, what to change, what to expect.
 The change names the file and the line. `--patch` prints it as a diff. Tallybook never edits your
 config.
