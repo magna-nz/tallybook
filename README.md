@@ -137,9 +137,6 @@ TALLYBOOK_CODEX_ROOTS=$PWD/internal/transcript/codex/testdata/sessions \
 go run ./cmd/tallybook --since all
 ```
 
-Release: push a `v*` tag. Needs a `HOMEBREW_TAP_TOKEN` secret with write access to
-`magna-nz/homebrew-tap`.
-
 ## Documentation
 
 * [`docs/DESIGN.md`](docs/DESIGN.md) — parsing rules, pricing formula, what is stored.
