@@ -5,6 +5,7 @@ package report
 
 import (
 	"fmt"
+	"github.com/magna-nz/tallybook/internal/model"
 	"math"
 	"strconv"
 	"strings"
@@ -139,4 +140,15 @@ func wrapText(s string, width int) []string {
 	}
 	lines = append(lines, cur)
 	return lines
+}
+
+// SourceLabel is the human name of a transcript source.
+func SourceLabel(src model.Source) string {
+	switch src {
+	case model.SourceClaudeCode:
+		return "Claude Code"
+	case model.SourceCodex:
+		return "Codex"
+	}
+	return string(src)
 }

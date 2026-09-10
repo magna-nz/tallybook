@@ -3,6 +3,7 @@ package report
 import (
 	"bufio"
 	"fmt"
+	"github.com/magna-nz/tallybook/internal/model"
 	"io"
 	"sort"
 	"strings"
@@ -52,6 +53,19 @@ func Report(w io.Writer, d ReportData) error {
 	fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Total", fmtUSD(d.Totals.USD), share(1))
 	fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Main session turns", fmtUSD(d.Totals.MainUSD), share(mainShare))
 	fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Sub-agents", fmtUSD(d.Totals.SubagentUSD), share(subShare))
+	if len(d.Totals.BySource) > 1 {
+		for _, src := range []model.Source{model.SourceClaudeCode, model.SourceCodex} {
+			st, ok := d.Totals.BySource[src]
+			if !ok {
+				continue
+			}
+			var sh float64
+			if d.Totals.USD > 0 {
+				sh = st.USD / d.Totals.USD
+			}
+			fmt.Fprintf(bw, "%-30s%18s%8s\n", "  "+SourceLabel(src), fmtUSD(st.USD), share(sh))
+		}
+	}
 	if n := len(d.Totals.UnknownModels); n > 0 {
 		var ids []string
 		var turns int

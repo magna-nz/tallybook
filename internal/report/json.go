@@ -40,10 +40,11 @@ type reportJSONDoc struct {
 	Sessions  int `json:"sessions"`
 	Subagents int `json:"subagents"`
 
-	Plan        string  `json:"plan"`
-	USD         float64 `json:"usd"`
-	MainUSD     float64 `json:"mainUSD"`
-	SubagentUSD float64 `json:"subagentUSD"`
+	Plan        string                `json:"plan"`
+	USD         float64               `json:"usd"`
+	MainUSD     float64               `json:"mainUSD"`
+	SubagentUSD float64               `json:"subagentUSD"`
+	BySource    map[string]sourceJSON `json:"bySource"`
 
 	Findings []reportFindingJSON `json:"findings"`
 
@@ -65,6 +66,10 @@ func ReportJSON(w io.Writer, d ReportData) error {
 	doc.USD = d.Totals.USD
 	doc.MainUSD = d.Totals.MainUSD
 	doc.SubagentUSD = d.Totals.SubagentUSD
+	doc.BySource = map[string]sourceJSON{}
+	for src, st := range d.Totals.BySource {
+		doc.BySource[string(src)] = sourceJSON{USD: st.USD, Sessions: st.Sessions, Turns: st.Turns}
+	}
 	doc.SkippedFiles = d.SkippedFiles
 
 	for _, f := range d.Findings {
@@ -156,6 +161,7 @@ func AgentsJSON(w io.Writer, rows []ledger.AgentRow) error {
 // sessionRowJSON is the JSON shape of one ledger.SessionCost.
 type sessionRowJSON struct {
 	ID        string  `json:"id"`
+	Source    string  `json:"source"`
 	Project   string  `json:"project"`
 	StartedAt string  `json:"startedAt"`
 	Turns     int     `json:"turns"`
@@ -178,7 +184,7 @@ func SessionsJSON(w io.Writer, rows []ledger.SessionCost, limit int) error {
 	doc := sessionsJSONDoc{Schema: 1}
 	for _, r := range rows {
 		doc.Sessions = append(doc.Sessions, sessionRowJSON{
-			ID: r.ID, Project: r.Project, StartedAt: r.StartedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID: r.ID, Source: string(r.Source), Project: r.Project, StartedAt: r.StartedAt.Format("2006-01-02T15:04:05Z07:00"),
 			Turns: r.Turns, USD: r.USD, Known: r.Known, AgentType: r.AgentType,
 		})
 	}
@@ -286,4 +292,10 @@ func PricesJSON(w io.Writer, table *pricing.Table) error {
 		})
 	}
 	return writeJSON(w, doc)
+}
+
+type sourceJSON struct {
+	USD      float64 `json:"usd"`
+	Sessions int     `json:"sessions"`
+	Turns    int     `json:"turns"`
 }

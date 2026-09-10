@@ -20,12 +20,12 @@ func Sessions(w io.Writer, rows []ledger.SessionCost, limit int) error {
 		rows = rows[:limit]
 	}
 
-	fmt.Fprintf(bw, "%-18s%-28s%-14s%7s%12s%14s\n",
-		"session", "project", "started", "turns", "cost", "sub-agent")
+	fmt.Fprintf(bw, "%-18s%-13s%-26s%-14s%7s%12s%14s\n",
+		"session", "source", "project", "started", "turns", "cost", "sub-agent")
 	for _, r := range rows {
 		agent := r.AgentType
-		fmt.Fprintf(bw, "%-18s%-28s%-14s%7d%12s%14s\n",
-			shortID(r.ID), truncate(projectLabel(r.Project), 27),
+		fmt.Fprintf(bw, "%-18s%-13s%-26s%-14s%7d%12s%14s\n",
+			shortID(r.ID), SourceLabel(r.Source), truncate(projectLabel(r.Project), 25),
 			r.StartedAt.Format("Jan 2 15:04"), r.Turns, fmtUSD(r.USD), agent)
 	}
 	if len(rows) == 0 {
@@ -36,10 +36,10 @@ func Sessions(w io.Writer, rows []ledger.SessionCost, limit int) error {
 }
 
 // Session writes one session's turn-by-turn detail.
-func Session(w io.Writer, id string, turns []model.Turn, cost float64) error {
+func Session(w io.Writer, id string, source model.Source, turns []model.Turn, cost float64) error {
 	bw := bufio.NewWriter(w)
 
-	fmt.Fprintf(bw, "Session %s — %d turns, %s\n\n", id, len(turns), fmtUSD(cost))
+	fmt.Fprintf(bw, "Session %s (%s) — %d turns, %s\n\n", id, SourceLabel(source), len(turns), fmtUSD(cost))
 	fmt.Fprintf(bw, "%-6s%-9s%-18s%10s%10s%10s  %s\n",
 		"turn", "time", "model", "in", "cached", "out", "note")
 

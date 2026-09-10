@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/magna-nz/tallybook/internal/model"
 	"strings"
 
 	"github.com/magna-nz/tallybook/internal/report"
@@ -31,6 +32,14 @@ func runSession(cmd *cobra.Command, flags *globalFlags, idOrPrefix string) error
 		return err
 	}
 
+	row, err := ctx.st.Session(id)
+	if err != nil {
+		return err
+	}
+	var source model.Source
+	if row != nil {
+		source = row.Source
+	}
 	turns, err := ctx.st.Turns(id)
 	if err != nil {
 		return err
@@ -45,7 +54,7 @@ func runSession(cmd *cobra.Command, flags *globalFlags, idOrPrefix string) error
 	if flags.json {
 		return report.SessionJSON(out, id, turns, usd)
 	}
-	return report.Session(out, id, turns, usd)
+	return report.Session(out, id, source, turns, usd)
 }
 
 // resolveSessionID finds the session with an exact id match, or the unique

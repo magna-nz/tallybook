@@ -47,6 +47,14 @@ type Totals struct {
 	Usage                      model.Usage
 	ByModel                    map[string]float64 // canonical model id -> USD
 	UnknownModels              map[string]int     // model id as written -> turn count
+	BySource                   map[model.Source]SourceTotal
+}
+
+// SourceTotal is the slice of the totals that came from one tool.
+type SourceTotal struct {
+	USD      float64
+	Sessions int // main sessions, not sub-agent runs
+	Turns    int
 }
 
 // Total rolls sessions up into a Totals. st and pr are used to re-walk each
@@ -55,6 +63,7 @@ func Total(sessions []SessionCost, st *store.Store, pr *pricing.Table) (Totals, 
 	tot := Totals{
 		ByModel:       map[string]float64{},
 		UnknownModels: map[string]int{},
+		BySource:      map[model.Source]SourceTotal{},
 	}
 
 	for _, sc := range sessions {
@@ -68,6 +77,13 @@ func Total(sessions []SessionCost, st *store.Store, pr *pricing.Table) (Totals, 
 		} else {
 			tot.MainUSD += sc.USD
 		}
+		src := tot.BySource[sc.Source]
+		src.USD += sc.USD
+		src.Turns += sc.Turns
+		if sc.AgentID == "" {
+			src.Sessions++
+		}
+		tot.BySource[sc.Source] = src
 
 		tot.Usage.Input += sc.Usage.Input
 		tot.Usage.CacheRead += sc.Usage.CacheRead
