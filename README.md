@@ -121,21 +121,6 @@ Read-only. Stores token counts, tool names, models, timestamps and project paths
 `~/.config/tallybook/tallybook.db`. Never stores prompt text, tool output or command lines. No
 network calls.
 
-## Development
-
-```sh
-go run ./cmd/tallybook --since 7d
-go test ./...
-```
-
-Try it on the fixtures with a throwaway database:
-
-```sh
-TALLYBOOK_DIR=/tmp/tb \
-TALLYBOOK_CLAUDE_ROOTS=$PWD/internal/transcript/claude/testdata/projects \
-TALLYBOOK_CODEX_ROOTS=$PWD/internal/transcript/codex/testdata/sessions \
-go run ./cmd/tallybook --since all
-```
 
 ## Documentation
 
