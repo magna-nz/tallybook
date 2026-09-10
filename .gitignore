@@ -1,0 +1,5 @@
+/dist/
+/tallybook
+*.db
+*.db-journal
+.DS_Store
