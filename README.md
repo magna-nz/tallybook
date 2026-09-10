@@ -51,8 +51,9 @@ months of history you already have sitting in `~/.claude/projects` and `~/.codex
 * 🧾 **Plain-English findings** — every finding is four short parts: what happened, why it costs
   money, what to change, what to expect. The change names the exact file and line. `--patch`
   prints it as a diff; tallybook never writes to your config on its own.
-* 🧮 **Two currencies** — dollars at list price if you pay per token, share of usage if you set
-  `plan = "subscription"` for a Max or Pro plan.
+* 🧮 **Two currencies** — dollars if you pay per token, share of usage if you're on a Max or Pro
+  plan. Tallybook reads how Claude Code is logged in and picks the right one; on a subscription
+  the dollar figures are labelled as what the usage *would* have cost, never as a bill.
 
 Illustrative report, not live data:
 
@@ -153,9 +154,9 @@ go build ./cmd/tallybook
    so you can see it before you touch anything.
 4. Next week, run `tallybook` again and check whether the number moved.
 
-`tallybook config init` writes an annotated config to `~/.config/tallybook/config.toml`. If you're
-on a Max or Pro plan rather than paying per token, set `plan = "subscription"` there and reports
-switch from dollars to share of usage.
+`tallybook config init` writes an annotated config to `~/.config/tallybook/config.toml`. The plan
+is detected from Claude Code's own login (`plan = "auto"`); set `plan = "api"` or
+`plan = "subscription"` there to force it.
 
 Roots and the database path can also be set with environment variables: `TALLYBOOK_DIR`,
 `TALLYBOOK_CLAUDE_ROOTS`, `TALLYBOOK_CODEX_ROOTS`.
@@ -188,7 +189,9 @@ Planned, not yet built:
 
 Tallybook reads transcripts read-only. It stores token counts, tool names, model names,
 timestamps and project paths in a local SQLite database at `~/.config/tallybook/tallybook.db`. It
-never stores prompt text or tool-result text. It makes no network calls at all.
+never stores prompt text or tool-result text. Shell commands are classified as read or write while
+the file is being parsed and the command line itself is thrown away. It makes no network calls at
+all.
 
 ## 📚 Documentation
 

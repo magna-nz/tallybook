@@ -186,6 +186,29 @@ func (t *Table) Canonical(model string) (string, bool) {
 	return t.longestPrefix(model)
 }
 
+// SameModel reports whether two model ids name the same model. Exact ids
+// compare by canonical form. A bare alias such as "opus" compares by family:
+// it matches any Opus, because what "opus" resolved to depends on when the
+// call was made, and the harness records the resolved id separately.
+func (t *Table) SameModel(a, b string) bool {
+	la, lb := strings.ToLower(strings.TrimSpace(a)), strings.ToLower(strings.TrimSpace(b))
+	if la == "" || lb == "" {
+		return false
+	}
+	if la == lb {
+		return true
+	}
+	if _, ok := t.aliases[la]; ok {
+		return Tier(lb) == la
+	}
+	if _, ok := t.aliases[lb]; ok {
+		return Tier(la) == lb
+	}
+	ca, oka := t.Canonical(a)
+	cb, okb := t.Canonical(b)
+	return oka && okb && ca == cb
+}
+
 // Lookup returns today's rate for a model id. See Canonical for resolution.
 func (t *Table) Lookup(model string) (Rate, bool) {
 	return t.LookupAt(model, time.Time{})

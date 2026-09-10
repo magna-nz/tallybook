@@ -72,6 +72,9 @@ type ToolCall struct {
 	ID         string // vendor tool_use id / call_id
 	Name       string // tool name as the harness names it (Read, Bash, exec_command, ...)
 	InputChars int    // size of the serialized input
+	// Class is ClassRead or ClassWrite for shell-style tools whose command
+	// could be classified, else "". See ClassifyCommand.
+	Class string
 	// Agent is non-nil when this call launched a sub-agent.
 	Agent *AgentLaunch
 }

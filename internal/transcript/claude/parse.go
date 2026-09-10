@@ -220,6 +220,14 @@ func Parse(path string) (*model.Transcript, error) {
 						Name:       block.Name,
 						InputChars: len(bytes.TrimSpace(block.Input)),
 					}
+					if block.Name == "Bash" {
+						var in struct {
+							Command string `json:"command"`
+						}
+						if err := json.Unmarshal(block.Input, &in); err == nil {
+							tc.Class = model.ClassifyCommand(in.Command)
+						}
+					}
 					if block.Name == "Agent" {
 						var in agentToolInput
 						if err := json.Unmarshal(block.Input, &in); err == nil {

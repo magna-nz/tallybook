@@ -268,7 +268,7 @@ func (s *Store) Turns(sessionID string) ([]model.Turn, error) {
 	}
 
 	tcRows, err := s.db.Query(`
-		SELECT turn_id, id, name, input_chars FROM tool_calls
+		SELECT turn_id, id, name, input_chars, class FROM tool_calls
 		WHERE session_id = ? ORDER BY id`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("store: query tool_calls: %w", err)
@@ -278,7 +278,7 @@ func (s *Store) Turns(sessionID string) ([]model.Turn, error) {
 	for tcRows.Next() {
 		var turnID string
 		var tc model.ToolCall
-		if err := tcRows.Scan(&turnID, &tc.ID, &tc.Name, &tc.InputChars); err != nil {
+		if err := tcRows.Scan(&turnID, &tc.ID, &tc.Name, &tc.InputChars, &tc.Class); err != nil {
 			return nil, fmt.Errorf("store: scan tool_call: %w", err)
 		}
 		if idx, ok := indexByID[turnID]; ok {
@@ -368,9 +368,11 @@ func (s *Store) ToolCounts(f Filter) (map[string]map[string]int, error) {
 
 	ph := placeholders(len(ids))
 	query := fmt.Sprintf(`
-		SELECT session_id, name, COUNT(*) FROM tool_calls
+		SELECT session_id,
+			CASE WHEN class = '' THEN name ELSE name || '(' || class || ')' END AS label,
+			COUNT(*) FROM tool_calls
 		WHERE session_id IN (%s)
-		GROUP BY session_id, name`, ph)
+		GROUP BY session_id, label`, ph)
 
 	rows, err := s.db.Query(query, toArgs(ids)...)
 	if err != nil {

@@ -13,7 +13,7 @@ func TestLoadMissingFileGivesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Plan != PlanAuto || cfg.Findings.MinRuns != 5 || cfg.DefaultSince != "30d" {
+	if cfg.Plan != PlanAuto || cfg.Findings.MinRuns != 3 || cfg.DefaultSince != "30d" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 }

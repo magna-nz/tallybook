@@ -205,3 +205,19 @@ func TestCanonicalMakesAliasesComparable(t *testing.T) {
 		t.Fatalf("alias and id differ: %q vs %q", a, b)
 	}
 }
+
+func TestSameModel(t *testing.T) {
+	tb := Default()
+	yes := [][2]string{{"opus", "claude-opus-4-8"}, {"opus", "claude-opus-5"}, {"fable", "claude-fable-5"}, {"sonnet", "claude-sonnet-5"}, {"claude-opus-5-20260401", "claude-opus-5"}, {"CLAUDE-OPUS-5", "claude-opus-5"}}
+	no := [][2]string{{"sonnet", "claude-opus-5"}, {"opus", "claude-sonnet-5"}, {"claude-opus-4-8", "claude-opus-5"}, {"", "claude-opus-5"}}
+	for _, c := range yes {
+		if !tb.SameModel(c[0], c[1]) {
+			t.Errorf("SameModel(%q,%q) = false, want true", c[0], c[1])
+		}
+	}
+	for _, c := range no {
+		if tb.SameModel(c[0], c[1]) {
+			t.Errorf("SameModel(%q,%q) = true, want false", c[0], c[1])
+		}
+	}
+}

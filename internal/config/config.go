@@ -60,7 +60,7 @@ func Default() Config {
 		DefaultSince: "30d",
 		DBPath:       filepath.Join(Dir(), "tallybook.db"),
 		Findings: Findings{
-			MinRuns:            5,
+			MinRuns:            3,
 			ToolOutputShare:    0.5,
 			MinCacheRebuilds:   3,
 			CacheGapMinutes:    5,
@@ -156,7 +156,7 @@ default_since = "30d"
 
 [findings]
 # disabled = ["thinking-on-relay"]
-min_runs = 5                # do not report a per-agent finding on fewer runs
+min_runs = 3                # do not report a per-agent finding on fewer runs
 tool_output_share = 0.5     # report when tool output is more than half of context
 min_cache_rebuilds = 3      # per session
 cache_gap_minutes = 5       # pause that lets the prompt cache expire

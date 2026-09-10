@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/magna-nz/tallybook/internal/model"
@@ -276,6 +277,7 @@ func Parse(path string) (*model.Transcript, error) {
 					ID:         p.CallID,
 					Name:       p.Name,
 					InputChars: len(p.Arguments),
+					Class:      classifyShellArgs(p.Name, []byte(p.Arguments)),
 				})
 
 			case "local_shell_call":
@@ -291,6 +293,7 @@ func Parse(path string) (*model.Transcript, error) {
 					ID:         id,
 					Name:       "local_shell",
 					InputChars: len(p.Action),
+					Class:      classifyShellArgs("local_shell", p.Action),
 				})
 
 			case "custom_tool_call":
@@ -412,4 +415,42 @@ func parseCallOutput(raw json.RawMessage) (chars int, isError bool) {
 	}
 
 	return 0, false
+}
+
+// shellTools are the Codex tool names that run a command line.
+var shellTools = map[string]bool{"exec_command": true, "shell": true, "local_shell": true, "bash": true, "container.exec": true, "shell_command": true}
+
+// classifyShellArgs pulls the command out of a shell tool's arguments,
+// which Codex has written as {"cmd": "..."}, {"command": "..."} or
+// {"command": ["bash", "-lc", "..."]} over time, and classifies it. The
+// command text is not kept.
+func classifyShellArgs(name string, args []byte) string {
+	if !shellTools[name] || len(args) == 0 {
+		return ""
+	}
+	var raw struct {
+		Cmd     json.RawMessage `json:"cmd"`
+		Command json.RawMessage `json:"command"`
+	}
+	if err := json.Unmarshal(args, &raw); err != nil {
+		return ""
+	}
+	for _, v := range [][]byte{raw.Cmd, raw.Command} {
+		if len(v) == 0 {
+			continue
+		}
+		var s string
+		if json.Unmarshal(v, &s) == nil {
+			return model.ClassifyCommand(s)
+		}
+		var parts []string
+		if json.Unmarshal(v, &parts) == nil && len(parts) > 0 {
+			// ["bash","-lc","<script>"]: classify the script, not the shell.
+			if len(parts) >= 3 && (parts[1] == "-lc" || parts[1] == "-c") {
+				return model.ClassifyCommand(parts[len(parts)-1])
+			}
+			return model.ClassifyCommand(strings.Join(parts, " "))
+		}
+	}
+	return ""
 }

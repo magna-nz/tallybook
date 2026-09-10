@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (
 	id          TEXT NOT NULL,
 	name        TEXT,
 	input_chars INTEGER,
+	class       TEXT NOT NULL DEFAULT '',
 	PRIMARY KEY (session_id, id)
 );
 
@@ -122,6 +123,9 @@ func Open(path string) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("store: create schema: %w", err)
+	}
+	if err := migrate(db); err != nil {
+		return nil, err
 	}
 
 	var count int
@@ -217,8 +221,8 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 	defer turnStmt.Close()
 
 	toolCallStmt, err := tx.Prepare(`
-		INSERT INTO tool_calls(session_id, turn_id, id, name, input_chars)
-		VALUES (?, ?, ?, ?, ?)`)
+		INSERT INTO tool_calls(session_id, turn_id, id, name, input_chars, class)
+		VALUES (?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("store: prepare tool_call insert: %w", err)
 	}
@@ -243,7 +247,7 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 		}
 
 		for _, tc := range turn.ToolCalls {
-			_, err = toolCallStmt.Exec(newSessionID, turn.ID, tc.ID, tc.Name, tc.InputChars)
+			_, err = toolCallStmt.Exec(newSessionID, turn.ID, tc.ID, tc.Name, tc.InputChars, tc.Class)
 			if err != nil {
 				return fmt.Errorf("store: insert tool_call %s: %w", tc.ID, err)
 			}
@@ -352,4 +356,45 @@ func uniqueNonEmpty(ids ...string) []string {
 		out = append(out, id)
 	}
 	return out
+}
+
+// migrate brings a database created by an older tallybook up to the current
+// schema. Every step must be safe to run twice.
+func migrate(db *sql.DB) error {
+	has, err := hasColumn(db, "tool_calls", "class")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := db.Exec(`ALTER TABLE tool_calls ADD COLUMN class TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("store: add tool_calls.class: %w", err)
+		}
+		// Old rows have no class; the next ingest refreshes changed files only,
+		// so force a full re-read by forgetting file states.
+		if _, err := db.Exec(`DELETE FROM files`); err != nil {
+			return fmt.Errorf("store: reset files after migration: %w", err)
+		}
+	}
+	return nil
+}
+
+func hasColumn(db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false, fmt.Errorf("store: table_info %s: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
