@@ -49,9 +49,3 @@ homebrew_casks:
     description: A local ledger for what your coding agents cost, and what you could have paid instead
     license: MIT
     binaries: [tallybook]
-    hooks:
-      post:
-        install: |
-          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tallybook"]
-          end
