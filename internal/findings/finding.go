@@ -48,12 +48,12 @@ type Table struct {
 // They must not use jargon without a gloss and must name exact files and
 // lines when there is something to change.
 type Finding struct {
-	ID         string     // rule slug, stable across versions
-	Title      string     // one line, sentence case, no trailing period
-	SavingUSD  float64    // estimated saving per 30 days at list price; 0 for Info
-	SavingShare float64   // the same saving as a fraction of the window's total spend, 0..1
-	Confidence Confidence
-	Direction  Direction
+	ID          string  // rule slug, stable across versions
+	Title       string  // one line, sentence case, no trailing period
+	SavingUSD   float64 // estimated saving per 30 days at list price; 0 for Info
+	SavingShare float64 // the same saving as a fraction of the window's total spend, 0..1
+	Confidence  Confidence
+	Direction   Direction
 
 	WhatHappened string
 	WhyItCosts   string
