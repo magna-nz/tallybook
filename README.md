@@ -11,8 +11,8 @@
   </p>
   <p>
     <a href="#-install">Install</a> ·
-    <a href="#-quick-start">Quick start</a> ·
-    <a href="#-what-you-get">Findings</a> ·
+    <a href="#-use">Use</a> ·
+    <a href="#-what-it-finds">Findings</a> ·
     <a href="docs/DESIGN.md">Design</a>
   </p>
 </div>
@@ -21,188 +21,125 @@
 
 ## 🤔 Why
 
-You run Claude Code and Codex CLI for hours and the only thing you see at the end is a bill, or a
-rate-limit warning. Tools like `ccusage` will tell you how much you spent. They will not tell you
-what for, or what it would have cost on a cheaper choice.
+You run Claude Code or Codex for hours and all you see at the end is a bill or a rate-limit
+warning. `ccusage` tells you how much. Tallybook tells you what for, and what it would have cost
+on a cheaper choice.
 
-**Tallybook reads the session transcripts your agents already write to disk, prices every
-response at list price, and prints plain-English findings about where the money went.** No proxy,
-no API key, nothing leaves your machine. The first time you run it, it works retroactively over
-months of history you already have sitting in `~/.claude/projects` and `~/.codex/sessions`.
+It reads the transcripts your agents already write to disk. No proxy, no API key, nothing leaves
+your machine. The first run covers every session you already have.
 
 > A *tally book* is the pocket ledger a rancher counts the herd in.
 
-## ✨ What you get
-
-* 📒 **A ledger** — every response, grouped by session, agent, model, project and day.
-* 🔍 **Read-only sub-agents on a strong model** — researcher and Explore style agents that only
-  Read, Grep and Glob, but ran on Opus. Tallybook recomputes what the same runs would have cost on
-  a cheaper tier.
-* 🎯 **Requested model not honoured** — you asked for Sonnet, the sub-agent ran on Opus. The
-  likely cause: a `model:` line in the agent file wins over the call site.
-* 🧠 **Cache rebuilt mid-session** — a pause longer than the prompt cache's TTL re-bills the whole
-  conversation from scratch.
-* 📦 **Tool output filling context** — the share of context made of raw command output and file
-  dumps, re-paid on every turn that follows.
-* 🔁 **Retry loops** — sessions that look under-powered because a command kept failing and getting
-  retried. The finding says do **not** downgrade these.
-* 💭 **Thinking spent on relay turns** — reasoning tokens burned on turns that just hand work to a
-  tool and back.
-* 🧾 **Plain-English findings** — every finding is four short parts: what happened, why it costs
-  money, what to change, what to expect. The change names the exact file and line. `--patch`
-  prints it as a diff; tallybook never writes to your config on its own.
-* 🧮 **Two currencies** — dollars if you pay per token, share of usage if you're on a Max or Pro
-  plan. Tallybook reads how Claude Code is logged in and picks the right one; on a subscription
-  the dollar figures are labelled as what the usage *would* have cost, never as a bill.
-
-Illustrative report, not live data:
+## 👀 What it looks like
 
 ```
 $ tallybook
 
-Scanned 193 sessions, 62 sub-agent runs (Jun 12 – Sep 10)
+Scanned 131 sessions, 70 sub-agent runs (Aug 20 – Sep 10)
 
-Last 30 days                    list price     share
-  Total                            $412.80      100%
-  Main session turns               $271.10       66%
-  Sub-agents                       $141.70       34%
+Last 30 days                          list price   share
+  Total                                  $412.80    100%
+  Main session turns                     $271.10     66%
+  Sub-agents                             $141.70     34%
 
 Top findings (estimated saving / month)
 
- 1. $58   Read-only sub-agents ran on Opus             high confidence
-          41 runs of researcher and Explore used only Read/Grep/Glob.
-          Same runs on Sonnet: $12.
-
- 2. $34   Requested model was not honoured             high confidence
- 3. $29   Cache rebuilt mid-session                    medium confidence
- 4. $21   Tool output is 61% of context                medium confidence
- 5.  --   3 sessions look under-powered                do not downgrade
+ 1.  $58.00   Read-only sub-agents ran on Opus                 high confidence
+ 2.  $34.00   You asked for a cheaper model but got Opus       high confidence
+ 3.  $29.00   Your saved context was rebuilt mid-session       medium confidence
+ 4.  $21.00   Command output is filling your context           medium confidence
+ 5.      --   3 sessions look under-powered                    do not downgrade
 
 Run `tallybook finding <n>` for evidence and the change to make.
 ```
 
-And the finding it points to:
-
 ```
 $ tallybook finding 1
 
-Read-only sub-agents ran on Opus                        saves about $58/month
+Read-only sub-agents ran on Opus                          saves about $58.00/month
 
   What happened
-  41 times you launched a researcher or Explore agent and it only read
-  files and searched. It never edited anything or ran a command that
-  changed the project.
+  41 times you launched a researcher agent and it only read files and searched.
 
   Why it costs money
-  Opus is billed at about two and a half times the rate of Sonnet for the
-  same tokens. Reading and summarising files is work the cheaper models do
-  about as well, so you pay the premium without getting the benefit.
+  Opus is billed at about 2.5x the rate of Sonnet for the same tokens.
 
   What to change
-  Open .claude/agents/researcher.md and add this line to the block at the
-  top of the file:
+  Open .claude/agents/researcher.md and add this line at the top:
 
       model: sonnet
 
   What to expect
-  Researcher runs should cost about 40% of what they do now. If their
-  reports start missing things, switch back. The next report will show
-  whether the error rate moved.
+  Researcher runs should cost about 40% of what they do now.
 ```
 
-## 📋 Requirements
+Numbers are illustrative. On a Max or Pro plan the dollar column becomes share of your usage.
 
-* Claude Code and/or Codex CLI, having written sessions to their default locations
-  (`~/.claude/projects`, `~/.codex/sessions`).
-* macOS 12+ or Linux.
-* Nothing else. No API key.
+## ✨ What it finds
+
+| Finding | What it means | What to do |
+|---|---|---|
+| 🔍 Read-only sub-agent on a strong model | An agent that only read and searched ran on Opus | Set `model: sonnet` in its agent file |
+| 🎯 Requested model not honoured | You asked for Sonnet, the agent ran on Opus | Remove the `model:` line that overrides the call |
+| 🧠 Cache rebuilt mid-session | A long pause expired the prompt cache and the whole conversation was re-billed | Use the one-hour cache setting |
+| 📦 Tool output filling context | Command output and file dumps are re-sent on every turn | Trim output with `tail`, or read big files in a sub-agent |
+| 🔁 Retry loops | The same action kept failing | Do **not** downgrade these. Give the agent a better brief |
+| 💭 Thinking on relay turns | Reasoning tokens spent on turns that only call the next tool | Set `effort: low` on that agent |
+
+Every finding has four parts: what happened, why it costs money, what to change, what to
+expect. The change names the file and the line. `--patch` prints it as a diff. Tallybook never
+edits your config.
 
 ## 📦 Install
-
-### macOS and Linux
 
 ```sh
 brew install --cask magna-nz/tap/tallybook
 ```
 
-That pulls in [magna-nz/homebrew-tap](https://github.com/magna-nz/homebrew-tap) on the way, so
-there's no separate `brew tap` step.
-
-### Go
+Or:
 
 ```sh
 go install github.com/magna-nz/tallybook/cmd/tallybook@latest
 ```
 
-### From a release
+Needs Claude Code or Codex CLI with sessions in their default folders. macOS or Linux. No API key.
 
-Download the tarball for your platform from the [latest release](https://github.com/magna-nz/tallybook/releases/latest).
+## 🚀 Use
 
-### From source
-
-```sh
-git clone https://github.com/magna-nz/tallybook.git
-cd tallybook
-go build ./cmd/tallybook
-```
-
-## 🚀 Quick start
-
-1. Run `tallybook`. The first run ingests everything on disk; it takes seconds, not minutes.
-2. Run `tallybook finding 1` to see the evidence behind the top finding.
-3. Apply the change it suggests. `tallybook finding 1 --patch` prints the config change as a diff
-   so you can see it before you touch anything.
-4. Next week, run `tallybook` again and check whether the number moved.
-
-`tallybook config init` writes an annotated config to `~/.config/tallybook/config.toml`. The plan
-is detected from Claude Code's own login (`plan = "auto"`); set `plan = "api"` or
-`plan = "subscription"` there to force it.
-
-Roots and the database path can also be set with environment variables: `TALLYBOOK_DIR`,
-`TALLYBOOK_CLAUDE_ROOTS`, `TALLYBOOK_CODEX_ROOTS`.
-
-## 🖥️ Commands
-
-This is the v0.1 surface.
-
-| Command | What it shows |
+| Command | Example |
 |---|---|
-| `tallybook` / `tallybook report` | The default report. Flags: `--since 7d\|30d\|all\|YYYY-MM-DD`, `--project`, `--claude` / `--codex` to look at one tool only, `--json`, `--currency usd\|share`. |
-| `tallybook finding <n>` | One finding in full, with `--evidence` and `--patch`. |
-| `tallybook agents` | Spend broken down by sub-agent. |
-| `tallybook sessions` | Spend broken down by session. |
-| `tallybook session <id>` | One session in detail. |
-| `tallybook status` | Ingest state: sources found, sessions scanned, last run. |
-| `tallybook prices` | The built-in price table. |
-| `tallybook config init` | Write an annotated config to `~/.config/tallybook/config.toml`. |
+| Report | `tallybook` |
+| Last week only | `tallybook --since 7d` |
+| One tool only | `tallybook --claude` or `tallybook --codex` |
+| One finding, with evidence | `tallybook finding 1 --evidence` |
+| The change as a diff | `tallybook finding 1 --patch` |
+| Spend by sub-agent | `tallybook agents` |
+| Spend by session | `tallybook sessions --sort cost` |
+| One session in detail | `tallybook session 81fd6a4a` |
+| Machine-readable | `tallybook --json` |
+| What was scanned | `tallybook status` |
+| The price table | `tallybook prices` |
+| Write a config file | `tallybook config init` |
 
-Planned, not yet built:
+`--since` takes `7d`, `30d`, `90d`, `all`, or a date. `--project <path>` limits to one repo.
 
-* `tallybook changes` — before/after tracking of config edits you've applied.
-* `tallybook hook stop` — a one-line session summary for a Claude Code stop hook.
-* A status line integration.
-* `tallybook watch` — a live view while a session runs.
-* `tallybook export` / `tallybook import` — move the ledger between machines.
-* A local proxy, so tools that don't write transcripts to disk can feed the same ledger.
+The plan is read from Claude Code's login. Force it with `--currency usd|share` or
+`plan = "api"` / `plan = "subscription"` in the config.
 
 ## 🔒 Privacy
 
-Tallybook reads transcripts read-only. It stores token counts, tool names, model names,
-timestamps and project paths in a local SQLite database at `~/.config/tallybook/tallybook.db`. It
-never stores prompt text or tool-result text. Shell commands are classified as read or write while
-the file is being parsed and the command line itself is thrown away. It makes no network calls at
-all.
+Read-only. Stores token counts, tool names, models, timestamps and project paths in
+`~/.config/tallybook/tallybook.db`. Never stores prompt text, tool output or command lines. No
+network calls.
 
 ## 🛠️ Development
 
-Go 1.27 or newer is the only requirement.
-
 ```sh
 go run ./cmd/tallybook --since 7d
+go test ./...
 ```
 
-Point it at the checked-in fixtures instead of your own transcripts, with a throwaway database, to
-see it work without touching anything under your home directory:
+Try it on the fixtures with a throwaway database:
 
 ```sh
 TALLYBOOK_DIR=/tmp/tb \
@@ -211,24 +148,10 @@ TALLYBOOK_CODEX_ROOTS=$PWD/internal/transcript/codex/testdata/sessions \
 go run ./cmd/tallybook --since all
 ```
 
-Run the tests, which cover the parsers, the store, pricing, every finding rule, the report layout
-and the CLI end to end:
-
-```sh
-go test ./...
-```
-
-The fixtures under `internal/transcript/*/testdata` are hand-written, not real sessions. To check
-a change against your own history, build the binary and run it with `TALLYBOOK_DIR` pointed at a
-scratch directory so your real database is left alone.
-
-To cut a release: push a tag like `v0.1.0`. The release workflow builds macOS and Linux binaries
-for both architectures and updates the Homebrew tap. It needs a `HOMEBREW_TAP_TOKEN` repository
-secret with write access to `magna-nz/homebrew-tap`.
+Release: push a `v*` tag. Needs a `HOMEBREW_TAP_TOKEN` secret with write access to
+`magna-nz/homebrew-tap`.
 
 ## 📚 Documentation
 
-* [docs/DESIGN.md](docs/DESIGN.md) — parsing rules for Claude Code and Codex transcripts, and the
-  pricing formula.
-* Prices were last verified 2026-09-10; run `tallybook prices` to see the table tallybook actually
-  uses.
+* [`docs/DESIGN.md`](docs/DESIGN.md) — parsing rules, pricing formula, what is stored.
+* Prices verified 2026-09-10. `tallybook prices` shows the table.
