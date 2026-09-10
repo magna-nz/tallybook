@@ -167,7 +167,7 @@ This is the v0.1 surface.
 
 | Command | What it shows |
 |---|---|
-| `tallybook` / `tallybook report` | The default report. Flags: `--since 7d\|30d\|all\|YYYY-MM-DD`, `--project`, `--json`, `--currency usd\|share`. |
+| `tallybook` / `tallybook report` | The default report. Flags: `--since 7d\|30d\|all\|YYYY-MM-DD`, `--project`, `--claude` / `--codex` to look at one tool only, `--json`, `--currency usd\|share`. |
 | `tallybook finding <n>` | One finding in full, with `--evidence` and `--patch`. |
 | `tallybook agents` | Spend broken down by sub-agent. |
 | `tallybook sessions` | Spend broken down by session. |

@@ -40,41 +40,62 @@ type parseFunc func(path string) (*model.Transcript, error)
 // store is counted in Failed and its path (with the error) is appended to
 // Errors, capped at 20; it never aborts the run.
 func Sync(cfg config.Config, st *store.Store) (Result, error) {
+	return SyncSource(cfg, st, "")
+}
+
+// SyncSource is Sync restricted to one source. An empty source means all.
+func SyncSource(cfg config.Config, st *store.Store, only model.Source) (Result, error) {
 	start := time.Now()
 	var res Result
 
+	if only == "" || only == model.SourceClaudeCode {
+		if err := syncClaude(cfg, st, &res); err != nil {
+			return res, err
+		}
+	}
+	if only == "" || only == model.SourceCodex {
+		if err := syncCodex(cfg, st, &res); err != nil {
+			return res, err
+		}
+	}
+	res.Elapsed = time.Since(start)
+	return res, nil
+}
+
+func syncClaude(cfg config.Config, st *store.Store, res *Result) error {
 	claudeRoots := cfg.ClaudeRoots
 	if len(claudeRoots) == 0 {
 		root, err := claude.DefaultRoot()
 		if err != nil {
-			return res, fmt.Errorf("ingest: claude default root: %w", err)
+			return fmt.Errorf("ingest: claude default root: %w", err)
 		}
 		claudeRoots = []string{root}
 	}
 	for _, root := range claudeRoots {
 		paths, err := claude.Discover(root)
 		if err != nil {
-			return res, fmt.Errorf("ingest: discover claude transcripts under %s: %w", root, err)
+			return fmt.Errorf("ingest: discover claude transcripts under %s: %w", root, err)
 		}
-		syncPaths(st, paths, claude.Parse, &res)
+		syncPaths(st, paths, claude.Parse, res)
 	}
+	return nil
+}
 
+func syncCodex(cfg config.Config, st *store.Store, res *Result) error {
 	codexRoots := cfg.CodexRoots
 	if len(codexRoots) == 0 {
 		roots, err := codex.DefaultRoots()
 		if err != nil {
-			return res, fmt.Errorf("ingest: codex default roots: %w", err)
+			return fmt.Errorf("ingest: codex default roots: %w", err)
 		}
 		codexRoots = roots
 	}
 	codexPaths, err := codex.Discover(codexRoots...)
 	if err != nil {
-		return res, fmt.Errorf("ingest: discover codex transcripts: %w", err)
+		return fmt.Errorf("ingest: discover codex transcripts: %w", err)
 	}
-	syncPaths(st, codexPaths, codex.Parse, &res)
-
-	res.Elapsed = time.Since(start)
-	return res, nil
+	syncPaths(st, codexPaths, codex.Parse, res)
+	return nil
 }
 
 // syncPaths ingests one source's discovered paths into res.

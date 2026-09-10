@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/magna-nz/tallybook/internal/model"
 	"os"
 	"path/filepath"
 	"time"
@@ -32,6 +33,20 @@ type globalFlags struct {
 	noIngest bool
 	currency string
 	db       string
+	claude   bool // scope to Claude Code sessions
+	codex    bool // scope to Codex sessions
+}
+
+// source turns the --claude/--codex pair into a filter value. Both or
+// neither means every source.
+func (f *globalFlags) source() model.Source {
+	switch {
+	case f.claude && !f.codex:
+		return model.SourceClaudeCode
+	case f.codex && !f.claude:
+		return model.SourceCodex
+	}
+	return ""
 }
 
 // appContext is the state most commands need: an open store, the resolved
@@ -87,7 +102,7 @@ func openApp(flags *globalFlags) (*appContext, error) {
 	ctx := &appContext{cfg: cfg, st: st, prices: prices}
 
 	if !flags.noIngest {
-		res, err := ingest.Sync(cfg, st)
+		res, err := ingest.SyncSource(cfg, st, flags.source())
 		if err != nil {
 			st.Close()
 			return nil, err
@@ -129,7 +144,7 @@ func openApp(flags *globalFlags) (*appContext, error) {
 	}
 	ctx.sinceFlag = since
 	ctx.window = window
-	ctx.filter = store.Filter{Since: window.Since, Until: window.Until, Project: flags.project}
+	ctx.filter = store.Filter{Since: window.Since, Until: window.Until, Project: flags.project, Source: flags.source()}
 
 	return ctx, nil
 }

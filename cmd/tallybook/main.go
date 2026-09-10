@@ -51,6 +51,8 @@ and what would have been cheaper. Nothing leaves your machine.`,
 	root.PersistentFlags().BoolVar(&flags.noIngest, "no-ingest", false, "skip scanning transcripts for new sessions")
 	root.PersistentFlags().StringVar(&flags.currency, "currency", "", "override the plan's currency: usd or share")
 	root.PersistentFlags().StringVar(&flags.db, "db", "", "path to the tallybook database (overrides config)")
+	root.PersistentFlags().BoolVar(&flags.claude, "claude", false, "only Claude Code sessions (default: every source)")
+	root.PersistentFlags().BoolVar(&flags.codex, "codex", false, "only Codex CLI sessions (default: every source)")
 
 	root.AddCommand(newReportCmd(flags))
 	root.AddCommand(newFindingCmd(flags))
