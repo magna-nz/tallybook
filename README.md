@@ -215,6 +215,42 @@ each session as it ends, so reports are instant, and appends a line per session 
 `~/.config/tallybook/sessions.log`. Claude Code does not show a hook's output, so that file is
 where the line goes.
 
+## Ask your agent mid-session
+
+`tallybook-mcp` serves the same ledger over the Model Context Protocol on stdio, so an agent can
+ask about its own spend instead of you running the CLI. It ships next to `tallybook` in every
+release and is built the same way.
+
+```sh
+claude mcp add tallybook -- tallybook-mcp
+```
+
+Codex and other MCP clients take the same command with no arguments. Once added, ask the agent
+"what have my sub-agents cost this week?" or "is there anything cheaper I should be doing?" and it
+will call the tools itself.
+
+| Tool | Returns |
+|---|---|
+| `report` | The window's total, the split by tool and by model, and the findings with their ids |
+| `finding` | One finding in full by id: the four sections, the evidence, the patch |
+| `changes` | Every sub-agent model change with before, after and a verdict |
+| `agents` | Spend per sub-agent type |
+| `sessions` | Sessions by cost or by time |
+| `session` | One session turn by turn, by id or a unique prefix |
+| `prices` | The price table and when it was verified |
+| `refresh` | Rescan transcripts now |
+
+The window tools (`report`, `finding`, `changes`, `agents`, `sessions`) take `since`, `project`,
+`source` (`claude-code` or `codex`) and `currency`; `session` takes an `id` and `currency`;
+`prices` and `refresh` take nothing. Every tool returns both prose and a structured value with the
+time of the last scan. The server scans once at startup and again when a tool is called more than
+a minute after the last scan, re-reading the config and plan each time. On a subscription the
+structured `currency` is `list_price_equivalent`, not `usd`: the figures are what the usage would
+have cost on the API, not a bill.
+
+It is read-only apart from its own database, makes no network calls, and never returns prompt
+text, tool output or command lines, because the database never holds them.
+
 ## Privacy
 
 Read-only. Reads the frontmatter of your `.claude/agents` files to check its own advice, never
