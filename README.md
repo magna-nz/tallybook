@@ -55,6 +55,28 @@ You are on a subscription: dollars are what this usage would cost on the API, no
 Share is the number to watch.
 ```
 
+And this week against last week:
+
+```
+$ tallybook --since 7d --compare
+
+Scanned 9 sessions, 34 sub-agent runs (Sep 8 – Sep 11)
+
+Last 7 days                      share list-price equiv.
+  Total                           100%           $235.47
+  Main session turns               81%           $191.78
+  Sub-agents                       19%            $43.68
+  Cache hit rate                   98%
+
+Compared with the 7 days before (Aug 28 – Sep 4)
+  Total               down 36%        $367.47 before, $235.47 now
+  Main session turns  down 43%        $339.02 before, $191.78 now
+  Sub-agents          up 54%          $28.45 before, $43.68 now
+  Sessions            down 40%        15 before, 9 now
+  Sub-agent runs      up 278%         9 before, 34 now
+  Cache hit rate      about the same  99% before, 98% now
+```
+
 ## Install
 
 ```sh
