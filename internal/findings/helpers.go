@@ -2,6 +2,7 @@ package findings
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -367,4 +368,55 @@ func capitalise(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// tokenizerCaveat explains, in plain English, what a model change does to the
+// estimate when the two models count tokens differently. It returns "" when
+// they count the same way, which is the common case.
+//
+// The estimate always prices the token counts actually recorded for the run at
+// the other model's rates. That is exact when both models share a tokenizer
+// and approximate when they do not, so the caveat names the direction of the
+// error rather than quietly correcting a number the transcript never held.
+func tokenizerCaveat(from, to string) string {
+	switch pricing.TokenizerDrift(from, to) {
+	case -1:
+		return fmt.Sprintf("One caveat on the figure: %s counts tokens the older way and needs "+
+			"roughly %s%% fewer of them for the same text. The estimate prices the token counts "+
+			"this run actually used, so the real saving is likely a little larger than shown.",
+			modelDisplay(to), fmtInt(int64(math.Round((1-1/pricing.NewTokenizerRatio)*100))))
+	case 1:
+		return fmt.Sprintf("One caveat on the figure: %s counts tokens the newer way and needs "+
+			"roughly %s%% more of them for the same text. The estimate prices the token counts "+
+			"this run actually used, so the real saving is likely smaller than shown, and may not "+
+			"be a saving at all.",
+			modelDisplay(to), fmtInt(int64(math.Round((pricing.NewTokenizerRatio-1)*100))))
+	}
+	return ""
+}
+
+// crossesTokenizer reports whether any of the model changes being suggested
+// compares two models that count tokens differently.
+func crossesTokenizer(pairs [][2]string) bool {
+	for _, p := range pairs {
+		if pricing.TokenizerDrift(p[0], p[1]) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// softenedBy lowers a confidence one notch, for an estimate carrying a known
+// approximation.
+func softenedBy(c Confidence, approximate bool) Confidence {
+	if !approximate {
+		return c
+	}
+	switch c {
+	case High:
+		return Medium
+	case Medium:
+		return Low
+	}
+	return c
 }

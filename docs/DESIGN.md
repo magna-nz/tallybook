@@ -58,6 +58,25 @@ A dated table per vendor. Cost per turn is
 `input*base + cache_read*read + cache_write_5m*w5 + cache_write_1h*w1 + output*out`.
 Codex has no TTL split; cache writes are billed at the base input rate.
 
+## Tokenizers
+
+The token counts in a transcript are the ones the API charged for, so the
+ledger is exact. A counterfactual is not: pricing one model's recorded counts
+at another model's rates assumes both models turn the same text into the same
+number of tokens.
+
+That holds inside a tokenizer family and not across one. Claude models from
+Opus 4.7 onward (Opus 4.7, 4.8, Opus 5, Sonnet 5, Fable, Mythos) use a newer
+tokenizer that produces roughly 30% more tokens for the same text than the one
+Sonnet 4.6 and earlier use, Haiku 4.5 included. The exact figure depends on the
+content.
+
+`pricing.Tokenizer` names the family and `pricing.TokenizerDrift` says which
+way a comparison errs. When a suggested change crosses families, the finding
+keeps the arithmetic the transcript supports, adds a sentence naming the
+direction of the error, and drops one step of confidence. It never scales a
+number by a ratio the transcript never held.
+
 ## Findings
 
 Each finding is a rule over the store. It produces: title, estimated saving,

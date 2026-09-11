@@ -847,3 +847,50 @@ func TestReadOnlyToolClassification(t *testing.T) {
 		t.Error("a run with no tool calls changed nothing")
 	}
 }
+
+// Opus 4.6 counts tokens the older way; the Sonnet 5 it would move to counts
+// them the newer way and needs roughly 30% more of them for the same text.
+// Pricing the recorded counts at Sonnet rates therefore flatters Sonnet, so
+// the finding must say the saving is likely smaller than shown.
+func TestReadOnlyAgentFlagsTokenizerChange(t *testing.T) {
+	st := newStore(t)
+	readOnlyFixture(t, st, "tok", "researcher", "claude-opus-4-6", 12, nil)
+
+	f, err := readOnlyAgentRule{}.Run(input(t, st))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if f == nil {
+		t.Fatal("expected a finding for read-only opus 4.6 runs")
+	}
+	if !strings.Contains(f.WhyItCosts, "newer way") {
+		t.Errorf("expected a tokenizer caveat, got:\n%s", f.WhyItCosts)
+	}
+	if !strings.Contains(f.WhyItCosts, "smaller than shown") {
+		t.Errorf("expected the caveat to name the direction of the error, got:\n%s", f.WhyItCosts)
+	}
+	if f.Confidence != Medium {
+		t.Errorf("12 runs alone would be High; a tokenizer change should soften it to Medium, got %q", f.Confidence)
+	}
+}
+
+// Opus to Sonnet stays inside one tokenizer family, so there is nothing to
+// caveat and nothing to soften.
+func TestReadOnlyAgentSilentWhenTokenizerMatches(t *testing.T) {
+	st := newStore(t)
+	readOnlyFixture(t, st, "same", "researcher", "claude-opus-5", 12, nil)
+
+	f, err := readOnlyAgentRule{}.Run(input(t, st))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if f == nil {
+		t.Fatal("expected a finding for read-only opus runs")
+	}
+	if strings.Contains(f.WhyItCosts, "older way") || strings.Contains(f.WhyItCosts, "newer way") {
+		t.Errorf("opus -> sonnet shares a tokenizer; no caveat expected, got:\n%s", f.WhyItCosts)
+	}
+	if f.Confidence != High {
+		t.Errorf("Confidence = %q, want high", f.Confidence)
+	}
+}

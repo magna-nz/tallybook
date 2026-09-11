@@ -84,15 +84,29 @@ func (requestedModelRule) Run(in Input) (*Finding, error) {
 		}
 	}
 
+	var pairs [][2]string
+	for _, m := range found {
+		pairs = append(pairs, [2]string{m.actual, m.requested})
+	}
+	approximate := saving > 0 && crossesTokenizer(pairs)
+
 	f := &Finding{
 		Direction:   Config,
-		Confidence:  High,
+		Confidence:  softenedBy(High, approximate),
 		SavingUSD:   in.PerMonth(saving),
 		SavingShare: in.Share(saving),
 	}
 	f.Title = requestedTitle(found, overspent, underspent)
 	f.WhatHappened = requestedWhatHappened(in, found)
 	f.WhyItCosts = requestedWhyItCosts(in, found, saving)
+	if approximate {
+		for _, m := range found {
+			if c := tokenizerCaveat(m.actual, m.requested); c != "" {
+				f.WhyItCosts += "\n\n" + c
+				break
+			}
+		}
+	}
 	f.WhatToChange = requestedWhatToChange(found)
 	f.WhatToExpect = "The requested and actual columns in `tallybook agents` should match after this. " +
 		"If they still differ, the override is coming from somewhere else and the agent file is not the culprit."

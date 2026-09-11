@@ -133,12 +133,21 @@ func (r readOnlyAgentRule) Run(in Input) (*Finding, error) {
 	if totalRuns >= 10 {
 		f.Confidence = High
 	}
+	var pairs [][2]string
+	for _, g := range groups {
+		pairs = append(pairs, [2]string{g.modelID, g.alt})
+	}
+	approximate := crossesTokenizer(pairs)
+	f.Confidence = softenedBy(f.Confidence, approximate)
 	f.SavingShare = in.Share(saving)
 
 	f.WhatHappened = readOnlyWhatHappened(in, groups, totalRuns)
 	f.WhyItCosts = readOnlyWhyItCosts(in, groups[0])
 	f.WhatToChange = readOnlyWhatToChange(groups)
 	f.WhatToExpect = readOnlyWhatToExpect(groups, current, altTotal)
+	if c := tokenizerCaveat(groups[0].modelID, groups[0].alt); c != "" {
+		f.WhyItCosts += "\n\n" + c
+	}
 	f.Patch = readOnlyPatch(groups)
 	f.Evidence = readOnlyEvidence(groups)
 	return f, nil
