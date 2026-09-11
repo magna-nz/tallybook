@@ -377,8 +377,12 @@ func TestChangesStillFindsASequentialSwitch(t *testing.T) {
 
 // A run that spans a later segment makes the whole stretch one concurrent
 // wave, however the start times happen to order. Comparing only against the
-// immediately preceding segment missed that and reported a phantom change;
-// this is the shape that survived on real data.
+// immediately preceding segment misses that and reports a change that never
+// happened.
+//
+// This is a guard against a real shape, not one observed in the wild: the
+// corpus this was written against has waves that abut closely but do not
+// actually span each other, so the narrower guard happened to be enough there.
 func TestChangesIgnoresAWaveSpannedByALongRun(t *testing.T) {
 	st := newStore(t)
 
