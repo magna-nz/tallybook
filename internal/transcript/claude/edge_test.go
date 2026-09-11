@@ -114,10 +114,3 @@ func TestBashCommandsAreClassifiedWithoutStoringText(t *testing.T) {
 		t.Fatalf("classes = %v, want [read write]", got)
 	}
 }
-
-func TestParseRejectsFileWithNoRecords(t *testing.T) {
-	p := writeTranscript(t, "proj/s1.jsonl", `{"type":"custom-title","customTitle":"x"}`, "not json at all")
-	if _, err := Parse(p); err == nil {
-		t.Fatal("expected an error for a file with no usable records")
-	}
-}

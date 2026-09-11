@@ -142,7 +142,7 @@ func Parse(path string) (*model.Transcript, error) {
 		toolIndex  = map[string]toolCallRef{} // tool_use_id -> location
 		toolResult []model.ToolResult
 		sessionID  string // sessionId field as written in the file
-		haveAny    bool
+		sawRecord  bool   // a structurally valid user or assistant record
 	)
 
 	for scanner.Scan() {
@@ -158,6 +158,7 @@ func Parse(path string) (*model.Transcript, error) {
 		if rec.Type != "user" && rec.Type != "assistant" {
 			continue
 		}
+		sawRecord = true
 
 		ts, tsErr := time.Parse(time.RFC3339Nano, rec.Timestamp)
 
@@ -254,7 +255,6 @@ func Parse(path string) (*model.Transcript, error) {
 					}
 				}
 			}
-			haveAny = true
 
 		case "user":
 			var um userMessage
@@ -280,7 +280,6 @@ func Parse(path string) (*model.Transcript, error) {
 					Chars:      chars,
 					IsError:    tb.IsError,
 				})
-				haveAny = true
 
 				if ref, found := toolIndex[tb.ToolUseID]; found {
 					if b, ok := byMsgID[ref.msgID]; ok && ref.index < len(b.toolCalls) {
@@ -296,8 +295,13 @@ func Parse(path string) (*model.Transcript, error) {
 		return nil, fmt.Errorf("claude: read %s: %w", path, err)
 	}
 
-	if !haveAny {
-		return nil, fmt.Errorf("claude: %s: no usable records", path)
+	// A session that only ever produced local notices (an API error, the
+	// machine going to sleep) is a real session with nothing billable in it.
+	// That is not a file we failed to read, and reporting it as one would be a
+	// false alarm on a corpus with plenty of them. Only a file with no
+	// recognisable records at all is an error.
+	if !sawRecord {
+		return nil, fmt.Errorf("claude: %s: not a transcript", path)
 	}
 
 	if isSubAgent && sess.AgentID == "" {
