@@ -62,10 +62,13 @@ command = "tallybook-mcp"
 ## Use
 
 ```sh
-tallybook                    # this period's report
-tallybook finding 1 --patch  # the fix, as a diff
-tallybook changes            # did a past change actually help?
-tallybook setup hook         # record sessions automatically
+tallybook                         # this period's report and its findings
+tallybook finding 1 --evidence    # finding #1, with the data behind it
+tallybook finding 1 --patch       # finding #1's fix, as an applyable diff
+tallybook agents                  # spend broken down by sub-agent type
+tallybook sessions --sort cost    # sessions ranked by what they cost
+tallybook changes                 # did a past model swap actually save money?
+tallybook setup hook              # record sessions automatically as they end
 ```
 
 ## Docs
