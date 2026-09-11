@@ -77,6 +77,8 @@ Compared with the 7 days before (Aug 28 – Sep 4)
   Cache hit rate      about the same  99% before, 98% now
 ```
 
+More in the [documentation](https://magna-nz.github.io/tallybook/).
+
 ## Install
 
 ```sh
@@ -116,17 +118,10 @@ tallybook changes                 # did a past model swap actually save money?
 tallybook setup hook              # record sessions automatically as they end
 ```
 
-Thirteen checks run over every report: which model short look-ups and read-only sub-agents ran on,
-what effort they ran at, how much of each turn was history or repeated output, whether the prompt
-cache was paid for and then wasted, and whether a subscription is paying for itself. Each one names
-the setting or the habit to change, and says whether its number is measured or estimated. The full
-list is in [`docs/DESIGN.md`](docs/DESIGN.md#findings).
-
 ## Docs
 
-Full command reference, the MCP server's tools, sample output, and the privacy model live on the
-**[documentation site](https://magna-nz.github.io/tallybook/)**. Parsing rules and pricing
-formula are in [`docs/DESIGN.md`](docs/DESIGN.md).
+The command reference, the MCP server's tools, configuration, and the privacy model live on the
+**[documentation site](https://magna-nz.github.io/tallybook/)**.
 
 ## License
 
