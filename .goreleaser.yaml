@@ -16,6 +16,15 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}}
+  - id: tallybook-mcp
+    main: ./cmd/tallybook-mcp
+    binary: tallybook-mcp
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}}
 
 archives:
   - id: default
@@ -48,7 +57,7 @@ homebrew_casks:
     homepage: https://github.com/magna-nz/tallybook
     description: A local ledger for what your coding agents cost, and what you could have paid instead
     license: MIT
-    binaries: [tallybook]
+    binaries: [tallybook, tallybook-mcp]
     # The release build is unsigned and un-notarized, so Gatekeeper quarantines
     # it and macOS refuses to run it: "Apple could not verify tallybook is free
     # of malware". Stripping the attribute at install time is deliberate rather
@@ -67,4 +76,5 @@ homebrew_casks:
         install: |
           if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tallybook"]
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tallybook-mcp"]
           end

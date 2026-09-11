@@ -1,18 +1,22 @@
 <div align="center">
   <img src="docs/tallybook-mark.svg" alt="Tallybook logo" width="104" />
   <h1>Tallybook</h1>
-  <p><strong>Shows you what you overpaid Claude Code and Codex CLI for.</strong></p>
+  <p><strong>Prices every Claude Code and Codex session on your disk, shows what each agent cost over any period, and tells you in plain English what would have been cheaper.</strong></p>
+  <p>A CLI for you, and an MCP server so your agent can check its own spend mid-session.</p>
   <p>
     <a href="https://github.com/magna-nz/tallybook/actions/workflows/ci.yml"><img src="https://github.com/magna-nz/tallybook/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
     <a href="https://github.com/magna-nz/tallybook/releases/latest"><img src="https://img.shields.io/github/v/release/magna-nz/tallybook?sort=semver&label=release" alt="Latest release" /></a>
     <img src="https://img.shields.io/badge/reads-Claude%20Code%20%7C%20Codex-blue" alt="Reads Claude Code and Codex CLI transcripts" />
     <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey" alt="Runs on macOS and Linux" />
+    <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-server-005FBA" alt="MCP server" /></a>
+    <a href="https://glama.ai/mcp/servers/magna-nz/tallybook"><img src="https://glama.ai/mcp/servers/magna-nz/tallybook/badges/score.svg" alt="Glama score" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   </p>
   <p>
     <a href="#install">Install</a> ·
     <a href="#use">Use</a> ·
     <a href="#what-it-finds">Findings</a> ·
+    <a href="#ask-your-agent-mid-session">MCP server</a> ·
     <a href="docs/DESIGN.md">Design</a>
   </p>
 </div>
@@ -27,6 +31,11 @@ money went on, and what it would have cost on a cheaper choice.
 
 No proxy, no API key, nothing leaves your machine. The first run covers every session you already
 have.
+
+It answers two questions. What did this cost: by period, by tool, by model, by session, and by
+sub-agent, measured from the token counts the API charged. And what should change: each finding
+names the setting or agent file to edit, what it would have saved, and what to expect after. Run
+it as a CLI, or add `tallybook-mcp` to Claude Code or Codex and ask the agent itself.
 
 ## What it looks like
 
@@ -214,6 +223,42 @@ Prints a `SessionEnd` hook for `~/.claude/settings.json`; `--write` adds it for 
 each session as it ends, so reports are instant, and appends a line per session to
 `~/.config/tallybook/sessions.log`. Claude Code does not show a hook's output, so that file is
 where the line goes.
+
+## Ask your agent mid-session
+
+`tallybook-mcp` serves the same ledger over the [Model Context Protocol](https://modelcontextprotocol.io/)
+on stdio, so an agent can ask about its own spend, and about what to change, instead of you running
+the CLI. It ships next to `tallybook` in every release and is built the same way.
+
+```sh
+claude mcp add tallybook -- tallybook-mcp
+```
+
+Codex and other MCP clients take the same command with no arguments. Once added, ask the agent
+"what have my sub-agents cost this week?" or "is there anything cheaper I should be doing?" and it
+will call the tools itself.
+
+| Tool | Returns |
+|---|---|
+| `report` | The window's total, the split by tool and by model, and the findings with their ids |
+| `finding` | One finding in full by id: the four sections, the evidence, the patch |
+| `changes` | Every sub-agent model change with before, after and a verdict |
+| `agents` | Spend per sub-agent type |
+| `sessions` | Sessions by cost or by time |
+| `session` | One session turn by turn, by id or a unique prefix |
+| `prices` | The price table and when it was verified |
+| `refresh` | Rescan transcripts now |
+
+The window tools (`report`, `finding`, `changes`, `agents`, `sessions`) take `since`, `project`,
+`source` (`claude-code` or `codex`) and `currency`; `session` takes an `id` and `currency`;
+`prices` and `refresh` take nothing. Every tool returns both prose and a structured value with the
+time of the last scan. The server scans once at startup and again when a tool is called more than
+a minute after the last scan, re-reading the config and plan each time. On a subscription the
+structured `currency` is `list_price_equivalent`, not `usd`: the figures are what the usage would
+have cost on the API, not a bill.
+
+It is read-only apart from its own database, makes no network calls, and never returns prompt
+text, tool output or command lines, because the database never holds them.
 
 ## Privacy
 
