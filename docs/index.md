@@ -17,6 +17,7 @@ A CLI for you, and an MCP server so your agent can check its own spend mid-sessi
 * [Use](#use)
 * [Did it help?](#did-it-help)
 * [What it finds](#what-it-finds)
+* [Configuration](#configuration)
 * [Install](#install)
 * [Recording sessions automatically](#recording-sessions-automatically)
 * [Ask your agent mid-session](#ask-your-agent-mid-session)
@@ -25,35 +26,38 @@ A CLI for you, and an MCP server so your agent can check its own spend mid-sessi
 
 ## What it looks like
 
-Real output from a working machine, trimmed to what the report itself shows: totals, counts and
-session-id prefixes. No file paths, prompts or command lines appear in a report.
+Real output from a working machine on a Max plan, which is why the share column leads and the
+dollars are labelled as a list-price equivalent. On API billing the dollar column leads and the
+numbers are a bill. A report shows totals, counts and session-id prefixes; no file paths, prompts or
+command lines ever appear in one.
 
 ```
 $ tallybook
 
-Scanned 137 sessions, 94 sub-agent runs (Aug 20 – Sep 11)
+Scanned 137 sessions, 96 sub-agent runs (Aug 20 – Sep 11)
 
-Last 30 days                          list price   share
-  Total                                $1,278.61    100%
-  Main session turns                   $1,108.36     87%
-  Sub-agents                             $170.25     13%
+Last 30 days                     share list-price equiv.
+  Total                           100%         $1,289.13
+  Main session turns               86%         $1,113.08
+  Sub-agents                       14%           $176.05
 
 Top findings (estimated saving / month)
 
- 1. $260.22   Long sessions pay to carry their own history     medium confidence
+ 1.     20%   Long sessions pay to carry their own history     medium confidence
               27 sessions in the last 30 days grew past 100,000 tokens of conversation.
- 2.  $29.74   Thinking was spent on turns that did no thinking low confidence
-              On 2,925 turns in the last 30 days, the model spent thinking tokens and then did no…
- 3.  $13.52   Your saved context was rebuilt mid-session       medium confidence
+ 2.      2%   Thinking was spent on turns that did no thinking low confidence
+              On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
+ 3.      1%   Your saved context was rebuilt mid-session       medium confidence
               In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
- 4.  $10.17   An hour of cache lifetime went unused            high confidence
+ 4.      1%   An hour of cache lifetime went unused            low confidence
               In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
- 5.   $7.53   Identical tool calls were repeated               medium confidence
+ 5.      1%   Identical tool calls were repeated               medium confidence
               In 9 sessions in the last 30 days, a read-only tool was called with the same input…
 
 Also worth knowing
 
  8. 8 sessions look under-powered                              do not downgrade
+ 9. Your plan is paying for itself                             informational
 
 2 more findings. Run `tallybook findings` to see them all.
 
@@ -61,7 +65,8 @@ Run `tallybook finding <n>` for evidence and the change to make.
 Savings are estimated one finding at a time. Where two touch the same runs
 they overlap, so they do not add up.
 
-Prices are Anthropic and OpenAI list prices, verified 2026-09-10.
+You are on a subscription: dollars are what this usage would cost on the API, not what you paid.
+Share is the number to watch.
 ```
 
 The report stops at five so it stays readable. Everything the checks found, grouped by the kind of
@@ -74,29 +79,34 @@ Every finding in this window (estimated saving / month)
 
 Move work to a cheaper model
 
- 6.   $3.37   Read-only sub-agents ran on Opus                 medium confidence
+ 6.     <1%   Read-only sub-agents ran on Opus                 medium confidence
               4 times in the last 30 days you launched a researcher agent and it only read files…
- 7.   $1.86   Short look-ups ran on Opus                       medium confidence
+ 7.     <1%   Short look-ups ran on Opus                       medium confidence
               8 of your own sessions in the last 30 days ran to 10 turns or fewer and only read:…
 
 Shrink what is sent every turn
 
- 1. $260.22   Long sessions pay to carry their own history     medium confidence
+ 1.     20%   Long sessions pay to carry their own history     medium confidence
               27 sessions in the last 30 days grew past 100,000 tokens of conversation.
- 5.   $7.53   Identical tool calls were repeated               medium confidence
+ 5.      1%   Identical tool calls were repeated               medium confidence
               In 9 sessions in the last 30 days, a read-only tool was called with the same input…
 
 Keep the prompt cache warm
 
- 3.  $13.52   Your saved context was rebuilt mid-session       medium confidence
+ 3.      1%   Your saved context was rebuilt mid-session       medium confidence
               In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
- 4.  $10.17   An hour of cache lifetime went unused            high confidence
+ 4.      1%   An hour of cache lifetime went unused            low confidence
               In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
 
 Lower thinking effort
 
- 2.  $29.74   Thinking was spent on turns that did no thinking low confidence
-              On 2,925 turns in the last 30 days, the model spent thinking tokens and then did no…
+ 2.      2%   Thinking was spent on turns that did no thinking low confidence
+              On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
+
+A setting is not doing what you think
+
+ 9.      --   Your plan is paying for itself                   informational
+              At list price, your usage in the last 30 days works out to about $1,289.13 a month,…
 
 Needs a stronger model or a better brief
 
@@ -111,11 +121,11 @@ Then one finding in full, with the change to make:
 ```
 $ tallybook finding 1
 
-Long sessions pay to carry their own history       saves about $260.22/month
+Long sessions pay to carry their own history   frees about 20% of your usage
 
   What happened
   27 sessions in the last 30 days grew past 100,000 tokens of conversation.
-  Across them, 4,580 turns ran above that mark, and the largest conversation
+  Across them, 4,606 turns ran above that mark, and the largest conversation
   sent was 777,015 tokens.
 
   Why it costs money
@@ -123,7 +133,7 @@ Long sessions pay to carry their own history       saves about $260.22/month
   long, most of what is sent is history the task in hand no longer needs. Most
   of it comes back from the cache at the cheaper read price, and the rest is
   fresh input and cache writes, which is why it never looks like much on any
-  one turn and still comes to about $520.44 a month across these sessions. The
+  one turn and still comes to about $522.75 a month across these sessions. The
   figure above is half of that, because a fresh session still has to be told
   what it needs before it can carry on, and being told costs something too.
 
@@ -154,8 +164,78 @@ it as a diff. A read-only sub-agent on Opus, say, gets `model: sonnet` for the b
 its `.claude/agents/<name>.md`, after tallybook has read that file to check the line is not already
 there.
 
-On a Max or Pro plan the share column leads instead, and the dollars are labelled as what the
-usage would have cost rather than what you paid.
+Two more, for the habits rather than the settings:
+
+```
+$ tallybook finding 5
+
+Identical tool calls were repeated              frees about 1% of your usage
+
+  What happened
+  In 9 sessions in the last 30 days, a read-only tool was called with the same
+  input 3 or more times in a row, 11 repeated groups in total. The worst case:
+  Read was called with the same input 28 times in session 490ddd47.
+
+  Why it costs money
+  Every call after the first puts the same result back into the conversation,
+  and from then on it is carried on every later turn, even though nothing
+  about it changed.
+
+  What to change
+  Habits, not settings. Add these lines to CLAUDE.md so they apply to every
+  session:
+
+    - Read a file once and quote the part you need, rather than reading it again.
+    - After an edit, re-read only the changed range, not the whole file.
+    - Use a sub-agent for a survey that would otherwise read the same files more than once.
+
+  For Codex, the same three lines belong in AGENTS.md.
+
+  What to expect
+  Repeated reads of the same input should drop to zero. Sessions stay usable
+  for longer because less of the context is a copy of something already sent.
+```
+
+```
+$ tallybook finding 7
+
+Short look-ups ran on Opus frees <1% of your usage, about $1.86 a month at list price
+
+  What happened
+  8 of your own sessions in the last 30 days ran to 10 turns or fewer and only
+  read: they looked at files and searched, and never edited anything or ran a
+  command that changed the project. These are the sessions you drove yourself,
+  not the sub-agents they launched. Together they cost $3.10. In 3 of them the
+  model called no tools at all: a question and an answer.
+
+  Why it costs money
+  Opus is billed at about 2.5x the rate of Sonnet for the same tokens. A
+  question that takes a few file reads and a paragraph of answer is work the
+  cheaper model does about as well, so on these sessions you paid the premium
+  without getting anything for it.
+
+  What to change
+  This is a habit rather than a file, so there is nothing to edit. Start a
+  quick look-up with `/model sonnet`, then press s to keep that choice for
+  this session only, which leaves your saved default untouched.
+
+  What to expect
+  Sessions like these should cost about 40% of what they do now. If the
+  answers start getting worse, switch back: there is nothing to undo.
+```
+
+And the per-agent table, which now says what effort level each agent mostly ran at:
+
+```
+$ tallybook agents
+
+agent                 runs             model  effort  avg cost  read-only  errors  requested≠actual
+implementer             52   claude-sonnet-5    high     $2.12         0%      75  0
+verifier                15     claude-opus-5    high     $2.66         0%      22  0
+general-purpose         20   claude-sonnet-5    high     $0.89         0%       4  0
+researcher               6   claude-opus-4-8    high     $1.09       100%       0  0
+claude-code-guide        2   claude-sonnet-5    high     $0.19        50%       0  0
+```
 
 ## Use
 
@@ -211,29 +291,151 @@ The change names the file and the line. `--patch` prints it as a diff. Tallybook
 config.
 
 Thirteen checks run over every report. Each has a floor below which it says nothing, so a quiet
-report means nothing crossed it, not that nothing was checked.
+report means nothing crossed it, not that nothing was checked. Two kinds of number appear and
+they are not equally strong: a **measured** figure is a token count the API charged, priced at the
+rate in force that day; an **estimated** figure prices one model's recorded tokens at another
+model's rates, or assumes a fraction, and the prose says which assumption it made. Where a
+cheaper-model estimate crosses a tokenizer family (Opus 4.7 and later against Sonnet 4.6 and
+earlier), the finding adds a sentence naming the direction of the error and drops one step of
+confidence.
 
-| Check | Asks you to |
-|---|---|
-| Read-only sub-agents ran on Opus or Fable | Pin a cheaper model in the agent file |
-| A launch asked for one model and got another | Fix the setting that overrode it |
-| Short, read-only main sessions ran on the top tier | Start look-ups with `/model sonnet` |
-| Read-only sub-agents ran at high or xhigh effort | Add `effort: medium` to the agent file |
-| Command output and file reads filled the context | Trim output; read big files in a sub-agent |
-| Long sessions paid to re-send history past 100k tokens | `/clear` between tasks; compact earlier |
-| The same read-only call repeated with identical input | Read once and keep the part you need |
-| A session was compacted again and again | Compact at a natural break; move big reads out |
-| A pause let the prompt cache expire | Keep the cache for an hour |
-| An hour of cache lifetime was paid for and never used | Drop back to five minutes |
-| Thinking tokens on turns that only handed off to a tool | Lower the effort level |
-| Sessions failed their way through a task | Give a fuller brief or a stronger model; not a saving |
-| List-price usage against what the plan costs | Nothing, unless the plan stops paying for itself |
+### Move work to a cheaper model
 
-The last one needs `plan_price` in the config. Every threshold lives under `[findings]` in
-`config.toml`; `tallybook config init` writes an annotated copy with the defaults.
+**Read-only sub-agents ran on Opus or Fable** (`readonly-agent-on-strong-model`, medium). A
+sub-agent run in which every tool call only looked at the project (Read, Grep, Glob, a `git
+status`) and nothing edited or ran a command that changed anything. Grouped by agent type, priced
+at the cheaper model's rates: estimated. Needs `min_runs` runs of that agent. The advice reads
+the agent's own `.claude/agents/<name>.md` and says whether to add `model: sonnet`, change the
+line it has, or leave it because it already says so. `--patch` prints the diff.
 
-Only the five biggest savings and two notes appear in the default report. `report_limit` and
-`min_saving_usd` in the config change that; `tallybook findings` always shows everything.
+**Short look-ups ran on Opus** (`main-session-on-strong-model`, medium). The same idea for the
+sessions you drive yourself: at most `main_session_turns` turns, every tool call read-only, or
+no tool calls at all (a question and an answer), on the Opus or Fable tier. Estimated at the
+cheaper model's rates. Needs three such sessions. The advice is a habit, `/model sonnet` and
+then `s` to keep it for the session only; when more than half of your main sessions look like
+this, it also suggests making the cheaper model the default in `~/.claude/settings.json`.
+
+### A setting is not doing what you think
+
+**You asked for a cheaper model but got Opus** (`requested-model-not-honoured`, high). The Agent
+call asked for one model and the child's own turns ran on another. The saving is what those runs
+would have cost at the model you asked for. Claude Code resolves a sub-agent's model at the call
+site first and the agent file second; the advice says which one overrode you.
+
+**Your plan against list price** (`subscription-break-even`). Only on a subscription, only with
+`plan_price` set, and only on a window of at least 14 days. Scales the window's list-price total
+to 30 days and compares it with the plan. Under the plan price it is a low-confidence saving with
+a note that rate limits, bundled features and the one-hour cache default differ; over it, an
+informational note that the plan is paying for itself.
+
+### Shrink what is sent every turn
+
+**Command output is filling your context** (`tool-output-bloat`, medium). Sessions that sent more
+than 200,000 tokens of context in total, where raw tool output carried for the rest of the
+session made up at least `tool_output_share` of it. Assumes trimming halves the cost of re-reading
+that output: estimated. The advice is three lines for CLAUDE.md.
+
+**Long sessions pay to carry their own history** (`long-context-tax`, medium). Every turn whose
+context exceeded `long_context_tokens`. The tax on such a turn is its input-side cost (fresh
+input, cache reads and cache writes, never output) scaled by the share of the context above the
+threshold. That tax is measured; the claimed saving is half of it, because a fresh session still
+has to be told what it needs. Needs three sessions with at least $0.50 of tax each. The advice is
+`/context`, `/clear` between tasks, `/compact` at a natural break, and `autoCompactWindow` for a
+lasting change.
+
+**Identical tool calls were repeated** (`repeated-tool-calls`, medium). The same read-only tool
+called with byte-identical input at least `repeat_threshold` times in one session, seen through
+the salted hash described under [Privacy](#privacy). Each repeat's result is carried on every
+later turn, so the cost is result tokens times the turns that followed, at the cache-read rate.
+That claim is capped at what the session measurably spent on cache reads, and image results are
+sized at what the API charges for an image rather than the length of their base64. Needs two
+sessions and $1. The advice is habits for CLAUDE.md or AGENTS.md.
+
+**Your sessions are compacting more than once** (`repeated-compaction`, informational). Claude
+Code main sessions with two or more compactions. The summarising request is a separate call the
+transcript never records, so no dollar figure is claimed; the evidence shows the context size just
+before each compaction. Codex has no compaction marker to find.
+
+### Keep the prompt cache warm
+
+**Your saved context was rebuilt mid-session** (`cache-rebuilt-mid-session`, medium). A pause
+longer than `cache_gap_minutes` followed by a turn that re-wrote at least half the previous
+context to the cache. The waste is the write price less the read price for those tokens:
+measured. Needs `min_cache_rebuilds` in a session. The transcript records whether each write took
+the five-minute or the one-hour lifetime, so the advice knows whether `promptCacheTtl` would have
+helped or whether the pauses simply ran past an hour.
+
+**An hour of cache lifetime went unused** (`cache-1h-without-pauses`). The mirror image: sessions
+where most cache writes took the one-hour lifetime and no pause between turns ever exceeded five
+minutes. The premium is the one-hour write rate less the five-minute rate on those tokens:
+measured. On API billing it is high confidence and the fix is `promptCacheTtl` set to `5m`. On a
+subscription it is low confidence, because the hour is the default Claude Code picks within plan
+usage and is not billed per token, and the finding says there is nothing to act on today.
+
+### Lower thinking effort
+
+**Thinking was spent on turns that did no thinking** (`thinking-on-relay`, low). Turns with one
+tool call, under 200 characters of visible text, and thinking tokens: a hand-off, not an answer.
+Grouped by agent; needs `thinking_relay_turns` of them. The thinking is priced at the output
+rate, and the advice is the effort setting.
+
+**Read-only sub-agents ran at high effort** (`effort-on-read-only-agents`, low). A sub-agent run
+that only read, with every turn at high, xhigh or max effort. Assumes dropping to medium halves
+its thinking tokens: estimated, and said so. Needs three runs of the agent. The advice is `effort:
+medium` in the agent file, with a patch; never a session-wide effort change, which would slow the
+main session too.
+
+### Needs a stronger model or a better brief
+
+**Sessions look under-powered** (`retry-loops`, informational). One tool failing
+`retry_threshold` or more times inside six consecutive calls, or a quarter of at least eight
+calls erroring. This is the counterweight to the downgrade findings: these sessions needed a
+fuller brief or a stronger model, and moving them to a cheaper one would make it worse. Never a
+saving.
+
+### Reading the report
+
+The default report lists the five biggest savings, then up to two notes under "Also worth
+knowing", then one line counting what it left out. A saving below `min_saving_usd` a month is
+counted rather than listed. `tallybook findings` lists everything, grouped as above. Both number
+findings by their position in the full list, so `tallybook finding <n>` means the same thing
+from either, and the printed numbers may skip. `--json` always carries every finding.
+
+Savings are estimated one finding at a time. Two findings that touch the same runs overlap, so
+they do not add up, and the report says so whenever it prints more than one.
+
+## Configuration
+
+`tallybook config init` writes an annotated `config.toml` to `~/.config/tallybook` (or
+`$XDG_CONFIG_HOME/tallybook`, or `$TALLYBOOK_DIR`). Every key is optional.
+
+| Key | Default | What it does |
+|---|---|---|
+| `plan` | `auto` | `api` reports dollars as a bill; `subscription` leads with share. `auto` reads Claude Code's login. |
+| `default_since` | `30d` | The window when `--since` is not given. |
+| `db_path` | `<config dir>/tallybook.db` | Where the ledger lives. |
+| `claude_roots`, `codex_roots` | `~/.claude/projects`, `~/.codex/sessions` | Where transcripts are read from. |
+| `[prices."<model>"]` | built-in table | Override or pin a price, USD per million tokens. |
+
+Under `[findings]`:
+
+| Key | Default | Used by |
+|---|---|---|
+| `disabled` | `[]` | Rule ids to skip entirely. |
+| `min_runs` | `3` | Per-agent findings: runs before an agent is reported. |
+| `tool_output_share` | `0.5` | Tool output as a share of context before it is bloat. |
+| `min_cache_rebuilds` | `3` | Rebuilds in one session before it is reported. |
+| `cache_gap_minutes` | `5` | A pause this long counts as a cache expiry. |
+| `retry_threshold` | `3` | Errors from one tool inside six calls. |
+| `thinking_relay_turns` | `20` | Relay turns with thinking, per agent. |
+| `main_session_turns` | `10` | A main session this short that only read is a look-up. |
+| `long_context_tokens` | `100000` | Past this, a turn is mostly carrying history. |
+| `repeat_threshold` | `3` | Identical read-only calls before it is a repeat. |
+| `min_saving_usd` | `1.0` | Smallest monthly saving the default report lists. |
+| `report_limit` | `5` | How many findings the default report lists. |
+| `plan_price` | unset | Your subscription's monthly price; turns on the break-even note. |
+
+The plan can also be forced per run with `--currency usd|share`, and the database with `--db`.
 
 ## Install
 

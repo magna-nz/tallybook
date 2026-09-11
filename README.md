@@ -19,29 +19,30 @@ Claude Code or Codex and ask the agent itself what it's spending and what would 
 ```
 $ tallybook
 
-Scanned 137 sessions, 94 sub-agent runs (Aug 20 – Sep 11)
+Scanned 137 sessions, 96 sub-agent runs (Aug 20 – Sep 11)
 
-Last 30 days                          list price   share
-  Total                                $1,278.61    100%
-  Main session turns                   $1,108.36     87%
-  Sub-agents                             $170.25     13%
+Last 30 days                     share list-price equiv.
+  Total                           100%         $1,289.13
+  Main session turns               86%         $1,113.08
+  Sub-agents                       14%           $176.05
 
 Top findings (estimated saving / month)
 
- 1. $260.22   Long sessions pay to carry their own history     medium confidence
+ 1.     20%   Long sessions pay to carry their own history     medium confidence
               27 sessions in the last 30 days grew past 100,000 tokens of conversation.
- 2.  $29.74   Thinking was spent on turns that did no thinking low confidence
-              On 2,925 turns in the last 30 days, the model spent thinking tokens and then did no…
- 3.  $13.52   Your saved context was rebuilt mid-session       medium confidence
+ 2.      2%   Thinking was spent on turns that did no thinking low confidence
+              On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
+ 3.      1%   Your saved context was rebuilt mid-session       medium confidence
               In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
- 4.  $10.17   An hour of cache lifetime went unused            high confidence
+ 4.      1%   An hour of cache lifetime went unused            low confidence
               In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
- 5.   $7.53   Identical tool calls were repeated               medium confidence
+ 5.      1%   Identical tool calls were repeated               medium confidence
               In 9 sessions in the last 30 days, a read-only tool was called with the same input…
 
 Also worth knowing
 
  8. 8 sessions look under-powered                              do not downgrade
+ 9. Your plan is paying for itself                             informational
 
 2 more findings. Run `tallybook findings` to see them all.
 
@@ -49,7 +50,8 @@ Run `tallybook finding <n>` for evidence and the change to make.
 Savings are estimated one finding at a time. Where two touch the same runs
 they overlap, so they do not add up.
 
-Prices are Anthropic and OpenAI list prices, verified 2026-09-10.
+You are on a subscription: dollars are what this usage would cost on the API, not what you paid.
+Share is the number to watch.
 ```
 
 ## Install
