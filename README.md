@@ -16,14 +16,14 @@ No proxy, no API key, nothing leaves your machine. Run it as a CLI, or add `tall
 Claude Code or Codex and ask the agent itself what it's spending and what would be cheaper.
 
 ```
-$ tallybook
+$ tallybook --since 7d
 
-Scanned 11 sessions, 15 sub-agent runs (Aug 14 – Sep 8)
+Scanned 4 sessions, 6 sub-agent runs (Sep 4 – Sep 10)
 
-Last 30 days                          list price   share
-  Total                                  $503.43    100%
-  Main session turns                     $494.81     98%
-  Sub-agents                               $8.62      2%
+Last 7 days                           list price   share
+  Total                                  $118.40    100%
+  Main session turns                     $115.62     98%
+  Sub-agents                               $2.78      2%
 
 Top findings (estimated saving / month)
 
@@ -43,6 +43,20 @@ brew install --cask magna-nz/tap/tallybook
 Also available via `go install github.com/magna-nz/tallybook/cmd/tallybook@latest`, or as a
 [release download](https://github.com/magna-nz/tallybook/releases/latest). Works on macOS, Linux
 and Windows.
+
+Add the MCP server so your agent can check its own spend mid-session — `tallybook-mcp` ships
+alongside `tallybook`, so no separate install:
+
+```sh
+claude mcp add tallybook -- tallybook-mcp   # Claude Code
+```
+
+For Codex, add it to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.tallybook]
+command = "tallybook-mcp"
+```
 
 ## Use
 
