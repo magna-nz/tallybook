@@ -11,6 +11,18 @@ A CLI for you, and an MCP server so your agent can check its own spend mid-sessi
 
 [← Back to the repo](https://github.com/magna-nz/tallybook)
 
+## Contents
+
+* [What it looks like](#what-it-looks-like)
+* [Use](#use)
+* [Did it help?](#did-it-help)
+* [What it finds](#what-it-finds)
+* [Install](#install)
+* [Recording sessions automatically](#recording-sessions-automatically)
+* [Ask your agent mid-session](#ask-your-agent-mid-session)
+* [Privacy](#privacy)
+* [Documentation](#documentation)
+
 ## What it looks like
 
 Real output, from a sample project rather than anyone's private history.

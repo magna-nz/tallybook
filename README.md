@@ -8,6 +8,7 @@
     <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-server-005FBA" alt="MCP server" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   </p>
+  <p><a href="https://magna-nz.github.io/tallybook/">Documentation</a></p>
 </div>
 
 <br />
@@ -16,14 +17,14 @@ No proxy, no API key, nothing leaves your machine. Run it as a CLI, or add `tall
 Claude Code or Codex and ask the agent itself what it's spending and what would be cheaper.
 
 ```
-$ tallybook
+$ tallybook --since 7d
 
-Scanned 11 sessions, 15 sub-agent runs (Aug 14 – Sep 8)
+Scanned 4 sessions, 6 sub-agent runs (Sep 4 – Sep 10)
 
-Last 30 days                          list price   share
-  Total                                  $503.43    100%
-  Main session turns                     $494.81     98%
-  Sub-agents                               $8.62      2%
+Last 7 days                           list price   share
+  Total                                  $118.40    100%
+  Main session turns                     $115.62     98%
+  Sub-agents                               $2.78      2%
 
 Top findings (estimated saving / month)
 
@@ -44,13 +45,30 @@ Also available via `go install github.com/magna-nz/tallybook/cmd/tallybook@lates
 [release download](https://github.com/magna-nz/tallybook/releases/latest). Works on macOS, Linux
 and Windows.
 
+Add the MCP server so your agent can check its own spend mid-session — `tallybook-mcp` ships
+alongside `tallybook`, so no separate install:
+
+```sh
+claude mcp add tallybook -- tallybook-mcp   # Claude Code
+```
+
+For Codex, add it to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.tallybook]
+command = "tallybook-mcp"
+```
+
 ## Use
 
 ```sh
-tallybook                    # this period's report
-tallybook finding 1 --patch  # the fix, as a diff
-tallybook changes            # did a past change actually help?
-tallybook setup hook         # record sessions automatically
+tallybook                         # this period's report and its findings
+tallybook finding 1 --evidence    # finding #1, with the data behind it
+tallybook finding 1 --patch       # finding #1's fix, as an applyable diff
+tallybook agents                  # spend broken down by sub-agent type
+tallybook sessions --sort cost    # sessions ranked by what they cost
+tallybook changes                 # did a past model swap actually save money?
+tallybook setup hook              # record sessions automatically as they end
 ```
 
 ## Docs
