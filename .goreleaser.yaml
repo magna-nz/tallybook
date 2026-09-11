@@ -49,3 +49,22 @@ homebrew_casks:
     description: A local ledger for what your coding agents cost, and what you could have paid instead
     license: MIT
     binaries: [tallybook]
+    # The release build is unsigned and un-notarized, so Gatekeeper quarantines
+    # it and macOS refuses to run it: "Apple could not verify tallybook is free
+    # of malware". Stripping the attribute at install time is deliberate rather
+    # than explaining it in caveats, because caveats print after the install and
+    # the user only reads them once the binary has already been blocked.
+    #
+    # This emits a deprecation warning from Homebrew about `postflight`, which
+    # is cosmetic. An earlier version removed the hook to silence that warning,
+    # on the mistaken belief that Homebrew clears quarantine for binary casks
+    # itself. It does not, and v0.2.0 shipped unrunnable because of it.
+    #
+    # Remove this once the build is signed and notarized, at which point there
+    # is no quarantine flag to clear.
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tallybook"]
+          end
