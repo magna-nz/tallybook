@@ -100,11 +100,14 @@ rest of the report.
 
 Two things guard against a repeat:
 
-* `internal/findings/settings.go` is the only place a configuration name may
-  come from. Each carries the documentation URL and the date it was checked. A
-  test scans the advice the rules generate and fails on any name that is not
-  there, and the detector is itself tested against the exact string that
-  shipped.
+* `internal/findings/settings.go` records every configuration name the advice
+  may use, each with the documentation URL and the date it was checked. A test
+  runs all six rules, scans the advice they generate for anything shaped like a
+  setting, and fails on any name not in that list. It recognises quoted and
+  backticked keys, environment variables, indented `key: value` lines in pasted
+  snippets, and backticked slash commands. The detector is tested directly
+  against the string that shipped and against the shapes an earlier, narrower
+  version missed.
 * `internal/agentfile` reads the frontmatter of a project's own
   `.claude/agents/*.md` files, so advice is checked against the config rather
   than assumed. That is what lets a finding tell apart a file pinning the wrong

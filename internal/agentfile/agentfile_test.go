@@ -17,6 +17,7 @@ func write(t *testing.T, dir, name, body string) {
 }
 
 func TestParseFrontmatter(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // never read the developer's own agent files
 	root := t.TempDir()
 	dir := filepath.Join(root, ".claude", "agents")
 	write(t, dir, "researcher.md", "---\nname: researcher\ndescription: reads things\ntools: Read, Grep, Glob\nmodel: sonnet\n---\n\nYou are a researcher. This body is prompt text and must not be read.\n")

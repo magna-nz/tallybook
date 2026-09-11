@@ -43,16 +43,31 @@ func Report(w io.Writer, d ReportData) error {
 		d.Sessions, d.Subagents, dateRange(d.Earliest, d.Latest))
 
 	title := windowTitle(d.SinceFlag, d.Window.Label)
-	fmt.Fprintf(bw, "%-30s%18s%8s\n", title, moneyHeader(d.Plan), "share")
+
+	// On a subscription the dollars are not a bill, so share leads and the
+	// list-price equivalent follows as a sense of scale. Paying per token, the
+	// money is the point and leads.
+	row := func(label string, usd, fraction float64) {
+		if d.Plan == config.PlanSubscription {
+			fmt.Fprintf(bw, "%-30s%8s%18s\n", label, share(fraction), fmtUSD(usd))
+			return
+		}
+		fmt.Fprintf(bw, "%-30s%18s%8s\n", label, fmtUSD(usd), share(fraction))
+	}
+	if d.Plan == config.PlanSubscription {
+		fmt.Fprintf(bw, "%-30s%8s%18s\n", title, "share", "list-price equiv.")
+	} else {
+		fmt.Fprintf(bw, "%-30s%18s%8s\n", title, moneyHeader(d.Plan), "share")
+	}
 
 	var mainShare, subShare float64
 	if d.Totals.USD > 0 {
 		mainShare = d.Totals.MainUSD / d.Totals.USD
 		subShare = d.Totals.SubagentUSD / d.Totals.USD
 	}
-	fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Total", fmtUSD(d.Totals.USD), share(1))
-	fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Main session turns", fmtUSD(d.Totals.MainUSD), share(mainShare))
-	fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Sub-agents", fmtUSD(d.Totals.SubagentUSD), share(subShare))
+	row("  Total", d.Totals.USD, 1)
+	row("  Main session turns", d.Totals.MainUSD, mainShare)
+	row("  Sub-agents", d.Totals.SubagentUSD, subShare)
 	if len(d.Totals.BySource) > 1 {
 		for _, src := range []model.Source{model.SourceClaudeCode, model.SourceCodex} {
 			st, ok := d.Totals.BySource[src]
@@ -63,7 +78,7 @@ func Report(w io.Writer, d ReportData) error {
 			if d.Totals.USD > 0 {
 				sh = st.USD / d.Totals.USD
 			}
-			fmt.Fprintf(bw, "%-30s%18s%8s\n", "  "+SourceLabel(src), fmtUSD(st.USD), share(sh))
+			row("  "+SourceLabel(src), st.USD, sh)
 		}
 	}
 	if n := len(d.Totals.UnknownModels); n > 0 {

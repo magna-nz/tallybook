@@ -79,7 +79,8 @@ func (s Set) loadDir(dir string, scope Scope) {
 		}
 		a.Scope = scope
 		key := strings.ToLower(a.Name)
-		// A project definition shadows a user one; among equals, first wins.
+		// A project definition shadows a user one. Among two project roots,
+		// the later root wins, which is the order the caller gave them in.
 		if existing, seen := s[key]; seen && existing.Scope == Project && scope != Project {
 			continue
 		}

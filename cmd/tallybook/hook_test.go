@@ -256,3 +256,24 @@ func TestHookSessionEndIngestsOnlyTheNamedTranscript(t *testing.T) {
 		t.Errorf("a Codex session was ingested that the hook was never given: %s", out)
 	}
 }
+
+// Without a transcript path the hook must still not scan every transcript on
+// disk: that is what would blow the SessionEnd budget on a long history.
+func TestHookSessionEndNeverScansEverything(t *testing.T) {
+	e2eEnv(t) // roots point at the fixtures, which hold four transcripts
+
+	// No transcript_path, so the hook has nothing specific to read.
+	if _, err := runHook(t, `{"hook_event_name":"SessionEnd","reason":"other"}`, "hook", "session-end"); err != nil {
+		t.Fatalf("a hook must never fail the session: %v", err)
+	}
+
+	out, err := run(t, "--no-ingest", "--since", "all", "--json", "sessions")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"sess-0001", "thr_0001", "thr_0002"} {
+		if strings.Contains(out, id) {
+			t.Errorf("the hook ingested %s without being asked to; it must not scan the whole history", id)
+		}
+	}
+}

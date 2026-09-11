@@ -229,3 +229,59 @@ func TestChangesPutsDecidedVerdictsFirst(t *testing.T) {
 		t.Errorf("a decided verdict is buried below an undecided one:\n%s", out)
 	}
 }
+
+// The sentence under the table must never contradict the numbers in it. A
+// verdict of keep tolerates a small rise in failures, and an earlier version
+// still said "nothing started failing more" when something had.
+func TestChangesSentenceNeverContradictsTheTable(t *testing.T) {
+	at := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name       string
+		change     ledger.Change
+		mustNotSay []string
+		mustSay    []string
+	}{
+		{
+			name: "kept, but failures edged up",
+			change: ledger.Change{
+				Agent: "researcher", From: "claude-opus-5", To: "claude-sonnet-5", At: at,
+				Before:  ledger.Side{Runs: 10, AvgUSD: 2.00, ErrorRate: 0.03},
+				After:   ledger.Side{Runs: 10, AvgUSD: 1.00, ErrorRate: 0.05},
+				Verdict: ledger.VerdictKeep,
+			},
+			mustNotSay: []string{"nothing started failing more"},
+			mustSay:    []string{"edged up"},
+		},
+		{
+			name: "watching something dearer that also fails more",
+			change: ledger.Change{
+				Agent: "researcher", From: "claude-sonnet-5", To: "claude-haiku-4-5", At: at,
+				Before:  ledger.Side{Runs: 10, AvgUSD: 1.00, ErrorRate: 0.02},
+				After:   ledger.Side{Runs: 10, AvgUSD: 1.03, ErrorRate: 0.07},
+				Verdict: ledger.VerdictWatch,
+			},
+			mustNotSay: []string{"barely moved"},
+			mustSay:    []string{"more often"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := report.Changes(&buf, []ledger.Change{c.change}, config.PlanAPI); err != nil {
+				t.Fatal(err)
+			}
+			out := buf.String()
+			for _, s := range c.mustNotSay {
+				if strings.Contains(out, s) {
+					t.Errorf("sentence contradicts the table, says %q:\n%s", s, out)
+				}
+			}
+			for _, s := range c.mustSay {
+				if !strings.Contains(out, s) {
+					t.Errorf("sentence should mention %q:\n%s", s, out)
+				}
+			}
+		})
+	}
+}

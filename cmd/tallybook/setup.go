@@ -116,7 +116,7 @@ func runSetupHook(cmd *cobra.Command, write bool) error {
 }
 
 // settingsDoc holds a Claude Code settings.json file loaded at just enough
-// resolution to touch "hooks"."SessionEnd" and leave everything else byte-for-byte
+// resolution to touch "hooks"."SessionEnd" and leave everything else unchanged in value (encoding/json re-indents and sorts keys)
 // as encoding/json can preserve it.
 type settingsDoc struct {
 	top        map[string]json.RawMessage

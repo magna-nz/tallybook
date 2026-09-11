@@ -75,6 +75,11 @@ func newHookSessionEndCmd(flags *globalFlags) *cobra.Command {
 	}
 }
 
+// hookWatchdog is the wall-clock budget the hook holds itself to. Claude Code
+// abandons a SessionEnd hook after about 1.5 seconds; finishing early and
+// silently is better than being killed mid-write.
+const hookWatchdog = 1200 * time.Millisecond
+
 // runHookSessionEnd does the real work. Every failure path returns silently
 // rather than propagating an error: a hook that makes noise or fails a session
 // is worse than one that does nothing.
@@ -85,14 +90,27 @@ func runHookSessionEnd(cmd *cobra.Command, flags *globalFlags) {
 		_ = recover()
 	}()
 
+	// Whatever happens below, this returns before Claude Code loses patience.
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-done:
+		case <-time.After(hookWatchdog):
+			// The session is ending anyway; the ledger catches up on the next
+			// ordinary run of tallybook.
+			os.Exit(0)
+		}
+	}()
+	defer close(done)
+
 	in := readHookInput(cmd.InOrStdin())
 
-	// A full scan would blow the 1.5 second budget on a large history. The
-	// hook names the one transcript that changed, so only that is read.
+	// A full scan would blow the 1.5 second budget on a large history, so the
+	// hook never does one. When Claude Code names the transcript that changed,
+	// that single file is read; when it does not, nothing is ingested and the
+	// summary comes from whatever the ledger already holds.
 	scoped := *flags
-	if in.TranscriptPath != "" {
-		scoped.noIngest = true
-	}
+	scoped.noIngest = true
 
 	ctx, err := openApp(&scoped)
 	if err != nil {
@@ -216,7 +234,7 @@ func mostRecentClaudeSessionID(st *store.Store) (string, bool) {
 	return best.ID, true
 }
 
-// hookSummaryLine composes the one line "hook stop" prints: the session's
+// hookSummaryLine composes the one line the session-end hook records: the session's
 // cost, the share of its context that was tool output, and how many
 // findings are open in the default window.
 func hookSummaryLine(ctx *appContext, row store.SessionRow) (string, bool) {

@@ -10,13 +10,12 @@ import (
 	"github.com/magna-nz/tallybook/internal/ledger"
 )
 
-// changesErrorRiseRevert and changesErrorTolerance mirror the thresholds
+// changesErrorRiseRevert mirrors the threshold
 // ledger.Changes uses to reach VerdictRevert, so the verdict sentence can
 // name which rule fired without ledger.Change needing to carry its own
 // working. Keep them in step with internal/ledger/changes.go.
 const (
 	changesErrorRiseRevert = 0.10
-	changesErrorTolerance  = 0.02
 	// changesDefaultMinRuns is the "too early" wait we tell the reader about.
 	// ledger.Change does not carry the minRuns a caller passed to
 	// ledger.Changes, so this assumes the documented default of 3.
@@ -116,6 +115,15 @@ func plural(n int) string {
 
 func keepSentence(c ledger.Change) string {
 	drop := pctChange(c.Before.AvgUSD, c.After.AvgUSD)
+	errPts := (c.After.ErrorRate - c.Before.ErrorRate) * 100
+	// A verdict of keep tolerates a small rise in errors. Saying "nothing
+	// started failing more" when something did is the one thing this sentence
+	// must never do, so it reports the rise rather than glossing it.
+	if errPts > 0.5 {
+		return fmt.Sprintf(
+			"About %.0f%% cheaper per run. Failures edged up %.0f point%s, which is small enough to "+
+				"live with, but worth a look if it keeps climbing.", drop, errPts, plural(int(errPts+0.5)))
+	}
 	return fmt.Sprintf(
 		"About %.0f%% cheaper per run, and nothing started failing more. Worth keeping.", drop)
 }
@@ -143,6 +151,17 @@ func watchSentence(c ledger.Change) string {
 		return fmt.Sprintf(
 			"More expensive by about %.0f%%, but errors dropped %.0f points. Worth watching whether the extra reliability is worth the price.",
 			-costPct, -errPts)
+	case costPct <= 0 && errPts > 0:
+		// Dearer and failing more often: nothing recommends it, but the moves
+		// were too small for the revert threshold.
+		return fmt.Sprintf(
+			"About %.0f%% more expensive per run and failing %.0f point%s more often. Nothing here "+
+				"argues for the change; give it a few more runs and revert it if this holds.",
+			-costPct, errPts, plural(int(errPts+0.5)))
+	case costPct > 0 && errPts <= 0:
+		return fmt.Sprintf(
+			"About %.0f%% cheaper per run with no more failures, but the move was too small to call "+
+				"on this many runs. Worth watching.", costPct)
 	default:
 		return "Cost and errors barely moved either way. Worth watching a bit longer before drawing a conclusion."
 	}
