@@ -1117,3 +1117,54 @@ func TestReadOnlyFloorStillExcludesThinEvidence(t *testing.T) {
 		t.Errorf("two runs is below a floor of five, but a finding was produced: %q", f.Title)
 	}
 }
+
+// An absolute path is noise in a sentence. A file under the user's home
+// directory reads better, and is more recognisable, as "~/...".
+func TestAdviceShortensHomePaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	inside := filepath.Join(home, ".claude", "agents", "researcher.md")
+	if got := displayPath(inside); got != filepath.Join("~", ".claude", "agents", "researcher.md") {
+		t.Errorf("displayPath(%q) = %q, want it shortened to ~", inside, got)
+	}
+
+	outside := filepath.Join(t.TempDir(), "elsewhere", "researcher.md")
+	if got := displayPath(outside); got != outside {
+		t.Errorf("a path outside home must be left alone, got %q", got)
+	}
+}
+
+// The shortened path has to reach the advice, not just the helper.
+func TestReadOnlyAdviceUsesTheShortenedPath(t *testing.T) {
+	st := newStore(t)
+	readOnlyFixture(t, st, "p1", "researcher", "claude-opus-5", 5, nil)
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "researcher.md"),
+		[]byte("---\nname: researcher\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	in := input(t, st)
+	in.Agents = agentfile.Load()
+
+	f, err := readOnlyAgentRule{}.Run(in)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if f == nil {
+		t.Fatal("expected a finding")
+	}
+	if strings.Contains(f.WhatToChange, home) {
+		t.Errorf("the advice spells out the home directory:\n%s", f.WhatToChange)
+	}
+	if !strings.Contains(f.WhatToChange, filepath.Join("~", ".claude", "agents", "researcher.md")) {
+		t.Errorf("expected the shortened path:\n%s", f.WhatToChange)
+	}
+}

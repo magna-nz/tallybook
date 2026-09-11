@@ -3,6 +3,7 @@ package findings
 import (
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -77,6 +78,21 @@ var builtinAgents = map[string]bool{
 	"statusline-setup":   true,
 	"claude":             true,
 	"output-style-setup": true,
+}
+
+// displayPath shortens a path under the user's home directory to "~/...". An
+// absolute path is mostly noise inside a sentence, and "~" is what the reader
+// would type anyway.
+func displayPath(p string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+	rel, err := filepath.Rel(home, p)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return p
+	}
+	return "~" + string(filepath.Separator) + rel
 }
 
 // agentFile is the file that defines a sub-agent type, or "" when the type is

@@ -233,17 +233,17 @@ func readOnlyWhatToChange(in Input, groups []*roGroup) string {
 				"%s already says %s, so the file is not what is putting these runs on %s. The model passed "+
 					"when the agent is launched wins over the file, so that is where to look. Drop it from "+
 					"the launch and the file's %s will be used.",
-				def.Path, def.Model, modelDisplay(g.modelID), def.Model))
+				displayPath(def.Path), def.Model, modelDisplay(g.modelID), def.Model))
 
 		case haveFile && def.SetsModel():
 			parts = append(parts, fmt.Sprintf(
 				"Change the model line in %s from %s to %s:\n\n    model: %s\n",
-				def.Path, def.Model, short, short))
+				displayPath(def.Path), def.Model, short, short))
 
 		case haveFile:
 			parts = append(parts, fmt.Sprintf(
 				"%s does not pin a model%s. Add this line to the block at the top of the file:\n\n    model: %s\n",
-				def.Path, inheritNote(def.Model), short))
+				displayPath(def.Path), inheritNote(def.Model), short))
 
 		case agentFile(g.agentType) != "":
 			parts = append(parts, fmt.Sprintf(
@@ -283,9 +283,9 @@ func readOnlyPatch(in Input, groups []*roGroup) string {
 		case def.SetsModel() && in.Prices.SameModel(def.Model, g.alt):
 			continue // the file already says it; the change belongs at the call site
 		case def.Model != "":
-			b.WriteString(replaceLinePatch(def.Path, "model: "+def.Model, want))
+			b.WriteString(replaceLinePatch(displayPath(def.Path), "model: "+def.Model, want))
 		default:
-			b.WriteString(frontmatterPatch(def.Path, want))
+			b.WriteString(frontmatterPatch(displayPath(def.Path), want))
 		}
 	}
 	return b.String()

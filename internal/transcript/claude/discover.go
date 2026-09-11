@@ -13,7 +13,14 @@ import (
 
 // DefaultRoot returns the default Claude Code transcript root,
 // ~/.claude/projects, expanded for the current user.
+// CLAUDE_CONFIG_DIR moves the whole ~/.claude tree, transcripts included, so
+// it has to be honoured or a user who sets it sees an empty report and no
+// explanation. Documented at code.claude.com/docs/en/claude-directory,
+// checked 2026-09-11.
 func DefaultRoot() (string, error) {
+	if dir := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR")); dir != "" {
+		return filepath.Join(dir, "projects"), nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err

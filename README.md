@@ -30,48 +30,66 @@ have.
 
 ## What it looks like
 
+Real output, from a sample project rather than anyone's private history.
+
 ```
 $ tallybook
 
-Scanned 131 sessions, 70 sub-agent runs (Aug 20 – Sep 10)
+Scanned 11 sessions, 15 sub-agent runs (Aug 14 – Sep 8)
 
 Last 30 days                          list price   share
-  Total                                  $412.80    100%
-  Main session turns                     $271.10     66%
-  Sub-agents                             $141.70     34%
+  Total                                  $503.43    100%
+  Main session turns                     $494.81     98%
+  Sub-agents                               $8.62      2%
 
 Top findings (estimated saving / month)
 
- 1.  $58.00   Read-only sub-agents ran on Opus                 high confidence
- 2.  $34.00   You asked for a cheaper model but got Opus       high confidence
- 3.  $29.00   Your saved context was rebuilt mid-session       medium confidence
- 4.  $21.00   Command output is filling your context           medium confidence
- 5.      --   3 sessions look under-powered                    do not downgrade
+ 1.  $8.58   Thinking was spent on turns that did no thinking low confidence
+             On 245 turns in the last 30 days, the model spent thinking tokens and then did noth…
+ 2.  $1.33   Read-only sub-agents ran on Opus                 medium confidence
+             6 times in the last 30 days you launched a researcher agent and it only read files…
+ 3.  $1.33   You asked for a cheaper model but got Opus       high confidence
+             6 times in the last 30 days your main session launched an agent and asked for Sonne…
 
 Run `tallybook finding <n>` for evidence and the change to make.
+Savings are estimated one finding at a time. Where two touch the same runs
+they overlap, so they do not add up.
+
+Prices are Anthropic and OpenAI list prices, verified 2026-09-10.
 ```
 
-```
-$ tallybook finding 1
+Then the evidence and the change to make:
 
-Read-only sub-agents ran on Opus                          saves about $58.00/month
+```
+$ tallybook finding 2
+
+Read-only sub-agents ran on Opus                     saves about $1.33/month
 
   What happened
-  41 times you launched a researcher agent and it only read files and searched.
+  6 times in the last 30 days you launched a researcher agent and it only read
+  files and searched. It never edited anything or ran a command that changed
+  the project. Between them those runs used Glob, Grep and Read, and nothing
+  else.
 
   Why it costs money
-  Opus is billed at about 2.5x the rate of Sonnet for the same tokens.
+  Opus is billed at about 2.5x the rate of Sonnet for the same tokens. Reading
+  and summarising files is work the cheaper model does about as well, so you
+  pay the premium without getting the benefit.
 
   What to change
-  Open .claude/agents/researcher.md and add this line at the top:
+  ~/.claude/agents/researcher.md does not pin a model. Add this line to the
+  block at the top of the file:
 
-      model: sonnet
+    model: sonnet
 
   What to expect
-  Researcher runs should cost about 40% of what they do now.
+  Researcher runs should cost about 40% of what they do now. If their reports
+  start missing things, switch back. The next report will show whether the
+  error rate moved.
 ```
 
-Numbers are illustrative. On a Max or Pro plan the dollar column becomes share of your usage.
+On a Max or Pro plan the share column leads instead, and the dollars are
+labelled as what the usage would have cost rather than what you paid.
 
 ## Use
 
@@ -107,12 +125,14 @@ switch. Changes with too few runs on one side to judge are counted rather than
 printed; `--all` shows them.
 
 ```
-implementer: Opus 5 to Sonnet 5, 10 Sep                                 keep
+$ tallybook changes
 
-  Before  3 runs   $3.14 each   7% of tool calls failed
-  After   5 runs   $0.22 each   5% of tool calls failed
+implementer: Opus 5 to Sonnet 5, 4 Sep                                  keep
 
-  About 93% cheaper per run, and nothing started failing more. Worth keeping.
+  Before  4 runs   $1.07 each   9% of tool calls failed
+  After   5 runs   $0.43 each   5% of tool calls failed
+
+  About 60% cheaper per run, and nothing started failing more. Worth keeping.
 ```
 
 This one is measured, not estimated. Both sides are real runs that really
@@ -126,18 +146,63 @@ config.
 
 ## Install
 
+### macOS and Linux
+
 ```sh
 brew install --cask magna-nz/tap/tallybook
 ```
 
-Or:
+That pulls in [magna-nz/homebrew-tap](https://github.com/magna-nz/homebrew-tap) on the way, so
+there is no separate `brew tap` step. Upgrade and remove with `brew upgrade --cask tallybook` and
+`brew uninstall --cask tallybook`.
+
+The build is unsigned, so macOS would otherwise refuse to run it. The cask strips the quarantine
+flag on install, which is why it opens without a detour through System Settings.
+
+### With Go
 
 ```sh
 go install github.com/magna-nz/tallybook/cmd/tallybook@latest
 ```
 
-Needs Claude Code or Codex CLI with sessions in their default folders. macOS, Linux or Windows.
-No API key.
+Puts the binary in `$(go env GOPATH)/bin`, which needs to be on your `PATH`.
+
+### From a release
+
+Download the archive for your platform from the
+[latest release](https://github.com/magna-nz/tallybook/releases/latest), unpack it, and put
+`tallybook` somewhere on your `PATH`. macOS and Linux builds are provided for both Intel and ARM,
+Windows for amd64 and arm64.
+
+On macOS a downloaded archive is quarantined, so clear the flag before the first run:
+
+```sh
+xattr -dr com.apple.quarantine ./tallybook
+```
+
+### From source
+
+Go 1.27 or newer.
+
+```sh
+git clone https://github.com/magna-nz/tallybook.git
+cd tallybook
+go build ./cmd/tallybook
+```
+
+### Requirements
+
+Claude Code or Codex CLI, with sessions where they put them by default:
+`~/.claude/projects` (or under `CLAUDE_CONFIG_DIR` if you have set it) and `~/.codex/sessions`.
+macOS, Linux or Windows. No API key and no account of any kind. Tallybook only reads files that
+are already on your disk.
+
+### Check it worked
+
+```sh
+tallybook --version
+tallybook --since 7d
+```
 
 ## Recording sessions automatically
 

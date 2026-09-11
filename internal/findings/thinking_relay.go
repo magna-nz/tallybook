@@ -158,7 +158,7 @@ func relayWhatToChange(in Input, groups []*relayGroup) string {
 		default:
 			if def, ok := in.Agents.Lookup(g.agent); ok {
 				parts = append(parts, fmt.Sprintf(
-					"In %s add this line to the block at the top:\n\n    effort: low\n", def.Path))
+					"In %s add this line to the block at the top:\n\n    effort: low\n", displayPath(def.Path)))
 				continue
 			}
 			if file := agentFile(g.agent); file != "" {
@@ -186,7 +186,7 @@ func relayPatch(in Input, groups []*relayGroup) string {
 			continue // not a file change
 		}
 		if def, ok := in.Agents.Lookup(g.agent); ok {
-			b.WriteString(frontmatterPatch(def.Path, "effort: low"))
+			b.WriteString(frontmatterPatch(displayPath(def.Path), "effort: low"))
 		}
 	}
 	return b.String()

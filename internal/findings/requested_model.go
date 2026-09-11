@@ -215,17 +215,17 @@ func requestedWhatToChange(in Input, found []mismatch) string {
 				"%s already says %s in %s, and that is what the runs used. What did not survive is the %s you "+
 					"asked for at the launch. Whatever is passing that model is being ignored, or is not "+
 					"reaching the launch at all: check the call site.",
-				def.Name, def.Model, def.Path, m.requested))
+				def.Name, def.Model, displayPath(def.Path), m.requested))
 		case haveFile && def.SetsModel():
 			parts = append(parts, fmt.Sprintf(
 				"%s sets %s, the launch asked for %s, and the runs used %s. None of those agree, so start by "+
 					"deciding which one you meant and making the other two match it.",
-				def.Path, def.Model, m.requested, modelDisplay(m.actual)))
+				displayPath(def.Path), def.Model, m.requested, modelDisplay(m.actual)))
 		case haveFile:
 			parts = append(parts, fmt.Sprintf(
 				"%s does not pin a model%s, so these runs fell back to whatever was in force. Add the model you "+
 					"want to the block at the top of that file:\n\n    model: %s\n",
-				def.Path, inheritNote(def.Model), shortModelName(m.requested)))
+				displayPath(def.Path), inheritNote(def.Model), shortModelName(m.requested)))
 		default:
 			parts = append(parts, fmt.Sprintf(
 				"There is no file for %s under .claude/agents, so the model can only be decided where it is "+

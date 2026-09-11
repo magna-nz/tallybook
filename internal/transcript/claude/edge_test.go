@@ -114,3 +114,26 @@ func TestBashCommandsAreClassifiedWithoutStoringText(t *testing.T) {
 		t.Fatalf("classes = %v, want [read write]", got)
 	}
 }
+
+// CLAUDE_CONFIG_DIR moves the whole .claude tree. Ignoring it left anyone who
+// sets it staring at an empty report with nothing to explain it.
+func TestDefaultRootHonoursClaudeConfigDir(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", "/somewhere/else")
+	got, err := DefaultRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join("/somewhere/else", "projects"); got != want {
+		t.Errorf("DefaultRoot() = %q, want %q", got, want)
+	}
+
+	t.Setenv("CLAUDE_CONFIG_DIR", "   ") // whitespace is not a setting
+	got, err = DefaultRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := os.UserHomeDir()
+	if want := filepath.Join(home, ".claude", "projects"); got != want {
+		t.Errorf("DefaultRoot() = %q, want the default %q", got, want)
+	}
+}
