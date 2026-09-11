@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -326,5 +328,48 @@ func TestSessionLogIsCapped(t *testing.T) {
 	}
 	if strings.HasPrefix(string(body), "\n") {
 		t.Error("trimming should leave the file starting on a whole line")
+	}
+}
+
+// Two sessions can end at once. A fixed temp name had them overwrite each
+// other's trimmed copy, so one lost its lines or the log ended up a mixture.
+func TestSessionLogTrimSurvivesConcurrentHooks(t *testing.T) {
+	e2eEnv(t)
+	path := filepath.Join(os.Getenv("TALLYBOOK_DIR"), sessionLogName)
+
+	big := strings.Repeat("2026-09-11T00:00:00Z  an old line\n", (sessionLogMaxBytes/34)+200)
+	if err := os.WriteFile(path, []byte(big), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			appendSessionLog(fmt.Sprintf("tallybook: session %d", n))
+		}(i)
+	}
+	wg.Wait()
+
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("the log should still be there: %v", err)
+	}
+	// Every line must be whole: a half-written line means two writers raced.
+	for _, line := range strings.Split(strings.TrimRight(string(body), "\n"), "\n") {
+		if line == "" {
+			t.Error("the log contains a blank line, so a write was interleaved")
+		}
+	}
+	// No temp files left behind.
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "sessions-") {
+			t.Errorf("a temporary file was left behind: %s", e.Name())
+		}
 	}
 }

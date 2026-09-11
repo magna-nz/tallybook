@@ -66,6 +66,10 @@ type runSpec struct {
 	at        time.Time
 	toolCalls int
 	errors    int
+	// duration is how long the run lasted. Zero means an hour, which is what
+	// most of these fixtures want; tests about overlapping runs set it so a
+	// short run can sit inside a long one.
+	duration time.Duration
 }
 
 // buildAgentRuns builds one parent transcript that launches len(specs)
@@ -101,7 +105,11 @@ func buildAgentRuns(t *testing.T, st *store.Store, parentID, agentType string, s
 		if n <= 0 {
 			n = 1
 		}
-		child := &model.Transcript{Session: childSession(childID, parentID, agentID, "/work/app", spec.at)}
+		childSess := childSession(childID, parentID, agentID, "/work/app", spec.at)
+		if spec.duration > 0 {
+			childSess.EndedAt = spec.at.Add(spec.duration)
+		}
+		child := &model.Transcript{Session: childSess}
 		for j := 0; j < n; j++ {
 			tcID := fmt.Sprintf("%s-tc%d", childID, j)
 			child.Turns = append(child.Turns, model.Turn{
@@ -364,5 +372,59 @@ func TestChangesStillFindsASequentialSwitch(t *testing.T) {
 	}
 	if changes[0].MinRuns != 3 {
 		t.Errorf("MinRuns = %d, want the threshold it was judged against", changes[0].MinRuns)
+	}
+}
+
+// A run that spans a later segment makes the whole stretch one concurrent
+// wave, however the start times happen to order. Comparing only against the
+// immediately preceding segment missed that and reported a phantom change;
+// this is the shape that survived on real data.
+func TestChangesIgnoresAWaveSpannedByALongRun(t *testing.T) {
+	st := newStore(t)
+
+	// Opus runs long. A short Sonnet run sits entirely inside it, and another
+	// Opus run starts after the Sonnet finished but while the first is still
+	// going. Segmented by start time that reads Opus, Sonnet, Opus.
+	specs := []runSpec{
+		// Runs for a full hour.
+		{model: "claude-opus-5", at: start, toolCalls: 5, duration: time.Hour},
+		// Starts and finishes well inside that hour.
+		{model: "claude-sonnet-5", at: start.Add(time.Minute), toolCalls: 1, duration: 5 * time.Minute},
+		// Starts after the Sonnet run ended, but while the first Opus run is
+		// still going. Looking only at the Sonnet segment sees a clear gap.
+		{model: "claude-opus-5", at: start.Add(30 * time.Minute), toolCalls: 5, duration: 10 * time.Minute},
+	}
+	buildAgentRuns(t, st, "span", "implementer", specs)
+
+	changes, err := ledger.Changes(st, pricing.Default(), store.Filter{}, 1)
+	if err != nil {
+		t.Fatalf("Changes: %v", err)
+	}
+	for _, c := range changes {
+		t.Errorf("a wave spanned by a long run was read as a change: %s to %s at %s",
+			c.From, c.To, c.At.Format(time.RFC3339))
+	}
+}
+
+// The guard must not swallow a real switch that happens to follow a long run.
+// Once everything before has finished, a later change is genuine.
+func TestChangesFindsASwitchAfterALongRunFinished(t *testing.T) {
+	st := newStore(t)
+
+	var specs []runSpec
+	specs = append(specs, runsAt("claude-opus-5", start, 3, 5, 0)...)
+	// Well after every opus run has ended.
+	specs = append(specs, runsAt("claude-sonnet-5", start.Add(48*time.Hour), 3, 5, 0)...)
+	buildAgentRuns(t, st, "after", "implementer", specs)
+
+	changes, err := ledger.Changes(st, pricing.Default(), store.Filter{}, 3)
+	if err != nil {
+		t.Fatalf("Changes: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("a switch after everything finished should still be found, got %d", len(changes))
+	}
+	if changes[0].From != "claude-opus-5" || changes[0].To != "claude-sonnet-5" {
+		t.Errorf("unexpected change: %s to %s", changes[0].From, changes[0].To)
 	}
 }

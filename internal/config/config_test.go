@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -84,5 +85,26 @@ func TestExpandHomeAcceptsBothSeparators(t *testing.T) {
 		if filepath.Base(cfg.DBPath) != "x.db" {
 			t.Errorf("%q expanded to %q, which does not end at the file", raw, cfg.DBPath)
 		}
+	}
+}
+
+// A backslash is an ordinary character in a Unix filename. Rewriting it as a
+// separator turns one file into a directory that does not exist.
+func TestExpandHomeKeepsBackslashesInAUnixPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a backslash is a separator on Windows, so there is nothing to preserve")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("TALLYBOOK_PLAN", "")
+	t.Setenv("TALLYBOOK_DB", `~/odd\name.db`)
+
+	cfg, err := LoadFrom(filepath.Join(t.TempDir(), "nope.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, `odd\name.db`)
+	if cfg.DBPath != want {
+		t.Errorf("DBPath = %q, want %q: the backslash is part of the file name", cfg.DBPath, want)
 	}
 }

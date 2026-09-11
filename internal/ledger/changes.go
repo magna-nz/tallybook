@@ -130,16 +130,33 @@ func Changes(st *store.Store, pr *pricing.Table, f store.Filter, minRuns int) ([
 			start = i
 		}
 
+		// maxEndBefore is the latest moment any run before the current boundary
+		// was still going. A change only means something once everything
+		// before it has finished: a long run spanning a later segment makes
+		// that whole stretch one concurrent wave, however the starts order.
+		var maxEndBefore time.Time
+		for _, r := range segments[0] {
+			if e := endOf(r); e.After(maxEndBefore) {
+				maxEndBefore = e
+			}
+		}
+
 		for i := 1; i < len(segments); i++ {
 			before, after := segments[i-1], segments[i]
-			if len(before) == 0 || len(after) == 0 {
-				continue
+			nextMaxEnd := maxEndBefore
+			for _, r := range after {
+				if e := endOf(r); e.After(nextMaxEnd) {
+					nextMaxEnd = e
+				}
 			}
+
 			// Two models running side by side are not a change from one to the
 			// other. Dispatching a wave of sub-agents with mixed models puts
 			// runs of both on the timeline at once, and ordering them by start
 			// time alone makes that look like a switch that never happened.
-			if overlaps(before, after) {
+			concurrent := len(before) == 0 || len(after) == 0 || maxEndBefore.After(earliestStart(after))
+			maxEndBefore = nextMaxEnd
+			if concurrent {
 				continue
 			}
 			beforeSide, afterSide := sideOf(before), sideOf(after)
@@ -172,29 +189,27 @@ func Changes(st *store.Store, pr *pricing.Table, f store.Filter, minRuns int) ([
 	return changes, nil
 }
 
-// overlaps reports whether any run in the earlier segment was still going when
-// the later segment began. A run with no recorded end is treated as ending
-// when it started, which is the reading that assumes least.
-func overlaps(before, after []runStat) bool {
-	if len(before) == 0 || len(after) == 0 {
-		return false
+// endOf is when a run stopped. A run with no recorded end is treated as
+// ending when it started, which is the reading that assumes least.
+func endOf(r runStat) time.Time {
+	if r.endedAt.IsZero() || r.endedAt.Before(r.startedAt) {
+		return r.startedAt
 	}
-	start := after[0].startedAt
-	for _, r := range after {
+	return r.endedAt
+}
+
+// earliestStart is when the first run in a segment began.
+func earliestStart(runs []runStat) time.Time {
+	if len(runs) == 0 {
+		return time.Time{}
+	}
+	start := runs[0].startedAt
+	for _, r := range runs {
 		if r.startedAt.Before(start) {
 			start = r.startedAt
 		}
 	}
-	for _, r := range before {
-		end := r.endedAt
-		if end.IsZero() || end.Before(r.startedAt) {
-			end = r.startedAt
-		}
-		if end.After(start) {
-			return true
-		}
-	}
-	return false
+	return start
 }
 
 // sideOf rolls up one contiguous run of same-model runs into a Side.

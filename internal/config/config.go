@@ -139,9 +139,16 @@ func applyEnv(cfg *Config) {
 }
 
 func expandHome(p string) string {
-	// Both separators: a Windows user writes "~\\path", and leaving it literal
-	// would silently create a directory named "~".
-	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
+	// A Windows user writes "~\\path", and leaving that literal would silently
+	// create a directory named "~". Only that spelling has its separators
+	// rewritten: on Unix a backslash is an ordinary character in a filename,
+	// so "~/od\\d.db" must stay one file rather than becoming two directories.
+	switch {
+	case strings.HasPrefix(p, "~/"):
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, filepath.FromSlash(p[2:]))
+		}
+	case strings.HasPrefix(p, `~\`):
 		if home, err := os.UserHomeDir(); err == nil {
 			return filepath.Join(home, filepath.FromSlash(strings.ReplaceAll(p[2:], `\`, "/")))
 		}

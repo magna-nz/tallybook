@@ -40,7 +40,7 @@ func runChanges(cmd *cobra.Command, flags *globalFlags, minRuns int, showAll boo
 
 	out := cmd.OutOrStdout()
 	if flags.json {
-		return report.ChangesJSON(out, cs)
+		return report.ChangesJSON(out, cs, showAll)
 	}
 	return report.Changes(out, cs, ctx.plan, showAll)
 }

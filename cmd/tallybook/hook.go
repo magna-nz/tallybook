@@ -178,11 +178,24 @@ func trimSessionLog(path string) {
 	if i := bytes.IndexByte(keep, '\n'); i >= 0 {
 		keep = keep[i+1:] // start at a line boundary
 	}
-	tmp := path + ".tmp"
-	if os.WriteFile(tmp, keep, 0o644) != nil {
+	// A unique name: two sessions can end at once, and a fixed temp path would
+	// have them overwrite each other's trimmed copy before either renamed it.
+	tmp, err := os.CreateTemp(filepath.Dir(path), "sessions-*.log")
+	if err != nil {
 		return
 	}
-	_ = os.Rename(tmp, path)
+	if _, err := tmp.Write(keep); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return
+	}
+	if os.Rename(tmp.Name(), path) != nil {
+		os.Remove(tmp.Name())
+	}
 }
 
 // readHookInput reads and parses whatever JSON is waiting on r, giving up

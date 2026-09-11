@@ -129,3 +129,84 @@ func TestProjectPrefixFilterAcceptsBothSeparators(t *testing.T) {
 		t.Errorf("an exact match on a directory with no sessions of its own should find none, got %d", len(rows))
 	}
 }
+
+// The stored project is a session's working directory, so which separator it
+// holds depends on the machine that recorded it. A prefix filter has to match
+// either, whichever machine is running the query.
+func TestProjectPrefixMatchesEitherStoredSeparator(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/t.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ts := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+
+	// Two sessions recorded on different machines, under the same project.
+	for i, project := range []string{`C:\repos\myapp\sub`, "/repos/myapp/sub"} {
+		s := model.Session{
+			ID: string(rune('a' + i)), Source: model.SourceClaudeCode,
+			Path: "/x/" + string(rune('a'+i)), Project: project, StartedAt: ts, EndedAt: ts,
+		}
+		if err := st.ReplaceTranscript(&model.Transcript{Session: s}, 1, ts); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, filter := range []string{`C:\repos\myapp\`, `C:\repos\myapp/`} {
+		rows, err := st.Sessions(store.Filter{Project: filter})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rows) != 1 {
+			t.Errorf("Project %q matched %d sessions, want the one stored with backslashes", filter, len(rows))
+		}
+	}
+	rows, err := st.Sessions(store.Filter{Project: "/repos/myapp/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Errorf("a forward-slash filter matched %d sessions, want 1", len(rows))
+	}
+}
+
+// An underscore is a wildcard in SQL LIKE and an ordinary character in a
+// directory name. Without escaping, one project's filter silently swallows
+// another project's sessions and every total for the window is wrong.
+func TestProjectPrefixDoesNotTreatUnderscoreAsAWildcard(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/t.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ts := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+
+	for i, project := range []string{"/repos/my_app/sub", "/repos/myXapp/sub", "/repos/my%app/sub"} {
+		s := model.Session{
+			ID: string(rune('a' + i)), Source: model.SourceClaudeCode,
+			Path: "/x/" + string(rune('a'+i)), Project: project, StartedAt: ts, EndedAt: ts,
+		}
+		if err := st.ReplaceTranscript(&model.Transcript{Session: s}, 1, ts); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rows, err := st.Sessions(store.Filter{Project: "/repos/my_app/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Errorf("my_app matched %d sessions; the underscore was treated as a wildcard", len(rows))
+	}
+	if len(rows) == 1 && rows[0].Project != "/repos/my_app/sub" {
+		t.Errorf("matched the wrong project: %q", rows[0].Project)
+	}
+
+	pct, err := st.Sessions(store.Filter{Project: "/repos/my%app/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pct) != 1 {
+		t.Errorf("a percent sign in a directory name matched %d sessions, want 1", len(pct))
+	}
+}

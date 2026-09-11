@@ -32,10 +32,14 @@ func (f Filter) whereClause() (string, []interface{}) {
 	}
 	if f.Project != "" {
 		// A trailing separator asks for everything under that directory.
-		// Windows users type a backslash, so both count.
+		// Windows users type a backslash, so both are accepted, and both are
+		// matched: the stored value is a session's working directory, so which
+		// separator it holds depends on the machine that recorded it, not on
+		// the one running the query.
 		if strings.HasSuffix(f.Project, "/") || strings.HasSuffix(f.Project, `\`) {
-			conds = append(conds, "project LIKE ?")
-			args = append(args, strings.TrimRight(f.Project, `/\`)+"/%")
+			prefix := escapeLike(strings.TrimRight(f.Project, `/\`))
+			conds = append(conds, "(project LIKE ? ESCAPE '!' OR project LIKE ? ESCAPE '!')")
+			args = append(args, prefix+"/%", prefix+`\%`)
 		} else {
 			conds = append(conds, "project = ?")
 			args = append(args, f.Project)
@@ -456,4 +460,13 @@ func (s *Store) Launches(f Filter) ([]LaunchRow, error) {
 		out = append(out, lr)
 	}
 	return out, rows.Err()
+}
+
+// escapeLike neutralises the wildcards in a LIKE pattern. Without it a project
+// directory called "my_app" would also match "myXapp", quietly folding another
+// project's sessions into the report. "!" is the escape character, chosen
+// because a backslash is ordinary in a Windows path.
+func escapeLike(s string) string {
+	r := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_")
+	return r.Replace(s)
 }

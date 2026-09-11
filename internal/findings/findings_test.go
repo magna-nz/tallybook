@@ -1071,3 +1071,49 @@ func TestThinkingRelayMainSessionAdviceNamesRealControls(t *testing.T) {
 	}
 	assertPlainEnglish(t, *f)
 }
+
+// The evidence floor asks whether an agent has done enough read-only work to
+// be worth reporting. Splitting its runs by which cheaper model each would
+// move to must not let a qualifying agent fall below the floor twice.
+func TestReadOnlyFloorAppliesToTheAgentNotEachAlternative(t *testing.T) {
+	st := newStore(t)
+	// Four runs on Fable, whose cheaper model is Opus, and four on Opus, whose
+	// cheaper model is Sonnet. Eight read-only runs on expensive models.
+	readOnlyFixture(t, st, "p1", "researcher", "claude-fable-5-1", 4, nil)
+	readOnlyFixture(t, st, "p2", "researcher", "claude-opus-5", 4, nil)
+
+	in := input(t, st)
+	in.Cfg.MinRuns = 5 // more than either half, fewer than the whole
+	in.Agents = agents(t, "researcher:")
+
+	f, err := readOnlyAgentRule{}.Run(in)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if f == nil {
+		t.Fatal("eight read-only runs on expensive models should be reported, " +
+			"even though neither half reaches the floor on its own")
+	}
+	if f.SavingUSD <= 0 {
+		t.Errorf("SavingUSD = %v, want > 0", f.SavingUSD)
+	}
+	assertPlainEnglish(t, *f)
+}
+
+// An agent that genuinely has too few runs is still below the floor.
+func TestReadOnlyFloorStillExcludesThinEvidence(t *testing.T) {
+	st := newStore(t)
+	readOnlyFixture(t, st, "p1", "researcher", "claude-opus-5", 2, nil)
+
+	in := input(t, st)
+	in.Cfg.MinRuns = 5
+	in.Agents = agents(t, "researcher:")
+
+	f, err := readOnlyAgentRule{}.Run(in)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if f != nil {
+		t.Errorf("two runs is below a floor of five, but a finding was produced: %q", f.Title)
+	}
+}

@@ -55,6 +55,10 @@ func (r readOnlyAgentRule) Run(in Input) (*Finding, error) {
 	}
 
 	byKey := map[string]*roGroup{}
+	// The floor asks whether an agent has done enough read-only work to be
+	// worth reporting. Splitting its runs by which cheaper model each would
+	// move to must not let a qualifying agent fall below it twice.
+	runsByAgent := map[string]int{}
 	for _, row := range rows {
 		if row.AgentID == "" {
 			continue // only sub-agent transcripts
@@ -93,6 +97,7 @@ func (r readOnlyAgentRule) Run(in Input) (*Finding, error) {
 			g = &roGroup{agentType: typ, modelID: canon, alt: alt, tools: map[string]int{}}
 			byKey[key] = g
 		}
+		runsByAgent[typ]++
 		g.runs++
 		for name, n := range counts[row.ID] {
 			g.tools[name] += n
@@ -103,7 +108,7 @@ func (r readOnlyAgentRule) Run(in Input) (*Finding, error) {
 
 	var groups []*roGroup
 	for _, g := range byKey {
-		if g.runs >= minRuns {
+		if runsByAgent[g.agentType] >= minRuns {
 			groups = append(groups, g)
 		}
 	}

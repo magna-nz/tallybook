@@ -215,7 +215,22 @@ func pctChange(before, after float64) float64 {
 }
 
 // ChangesJSON writes the model changes as JSON.
-func ChangesJSON(w io.Writer, cs []ledger.Change) error {
+// ChangesJSON writes the same set the text view would, so a script and a
+// person asking the same question get the same answer.
+func ChangesJSON(w io.Writer, cs []ledger.Change, showAll bool) error {
+	if !showAll {
+		kept := cs[:0:0]
+		for _, c := range cs {
+			if c.Verdict != ledger.VerdictTooEarly {
+				kept = append(kept, c)
+			}
+		}
+		cs = kept
+	}
+	return changesJSON(w, cs)
+}
+
+func changesJSON(w io.Writer, cs []ledger.Change) error {
 	doc := changesJSONDoc{Schema: 1}
 	for _, c := range cs {
 		doc.Changes = append(doc.Changes, changeJSON{

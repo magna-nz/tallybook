@@ -2,6 +2,7 @@ package report_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -142,7 +143,7 @@ func TestChangesSubscriptionLabelsEquivalent(t *testing.T) {
 func TestChangesJSON(t *testing.T) {
 	c := buildChange(ledger.VerdictKeep)
 	var buf bytes.Buffer
-	if err := report.ChangesJSON(&buf, []ledger.Change{c}); err != nil {
+	if err := report.ChangesJSON(&buf, []ledger.Change{c}, true); err != nil {
 		t.Fatalf("ChangesJSON: %v", err)
 	}
 	out := buf.String()
@@ -176,7 +177,7 @@ func TestChangesRendersDisplayNamesButJSONKeepsIDs(t *testing.T) {
 	}
 
 	var js bytes.Buffer
-	if err := report.ChangesJSON(&js, cs); err != nil {
+	if err := report.ChangesJSON(&js, cs, true); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(js.String(), "claude-opus-5") {
@@ -368,5 +369,56 @@ func TestChangesAllUndecidedSaysSo(t *testing.T) {
 	}
 	if !strings.Contains(out, "--all") {
 		t.Errorf("expected the reader to be told how to see them:\n%s", out)
+	}
+}
+
+// A script and a person asking the same question must get the same answer.
+// The text view hides undecided changes by default, so the JSON must too.
+func TestChangesJSONMatchesTheTextView(t *testing.T) {
+	at := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	keep := ledger.Change{
+		Agent: "researcher", From: "claude-opus-5", To: "claude-sonnet-5", At: at,
+		Before:  ledger.Side{Runs: 6, AvgUSD: 2},
+		After:   ledger.Side{Runs: 6, AvgUSD: 1},
+		Verdict: ledger.VerdictKeep, MinRuns: 3,
+	}
+	early := ledger.Change{
+		Agent: "implementer", From: "claude-sonnet-5", To: "claude-opus-5", At: at,
+		Before: ledger.Side{Runs: 1}, After: ledger.Side{Runs: 1},
+		Verdict: ledger.VerdictTooEarly, MinRuns: 3,
+	}
+	cs := []ledger.Change{keep, early, early}
+
+	var quiet bytes.Buffer
+	if err := report.ChangesJSON(&quiet, cs, false); err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Changes []struct {
+			Agent   string `json:"agent"`
+			Verdict string `json:"verdict"`
+		} `json:"changes"`
+	}
+	if err := json.Unmarshal(quiet.Bytes(), &doc); err != nil {
+		t.Fatalf("JSON did not parse: %v\n%s", err, quiet.String())
+	}
+	if len(doc.Changes) != 1 {
+		t.Errorf("JSON returned %d changes; the text view shows 1", len(doc.Changes))
+	}
+	for _, c := range doc.Changes {
+		if c.Verdict == string(ledger.VerdictTooEarly) {
+			t.Errorf("an undecided change reached the JSON: %+v", c)
+		}
+	}
+
+	var all bytes.Buffer
+	if err := report.ChangesJSON(&all, cs, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(all.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Changes) != 3 {
+		t.Errorf("--all should return every change, got %d", len(doc.Changes))
 	}
 }
