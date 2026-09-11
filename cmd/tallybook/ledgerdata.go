@@ -3,8 +3,10 @@ package main
 import (
 	"time"
 
+	"github.com/magna-nz/tallybook/internal/agentfile"
 	"github.com/magna-nz/tallybook/internal/findings"
 	"github.com/magna-nz/tallybook/internal/ledger"
+	"github.com/magna-nz/tallybook/internal/store"
 )
 
 // sessionsAndTotals runs the ledger queries every report-like command
@@ -28,6 +30,7 @@ func findingsFor(ctx *appContext, totals ledger.Totals) ([]findings.Finding, err
 	in := findings.Input{
 		Store:      ctx.st,
 		Prices:     ctx.prices,
+		Agents:     agentfile.Load(projectRoots(ctx)...),
 		Cfg:        ctx.cfg.Findings,
 		Plan:       ctx.plan,
 		Filter:     ctx.filter,
@@ -63,4 +66,24 @@ func countMainAndSub(sessions []ledger.SessionCost) (main, sub int) {
 		}
 	}
 	return main, sub
+}
+
+// projectRoots is every project directory seen in the window, so the advice can
+// be checked against those projects' own agent files. A worktree's agent files
+// live in the worktree, so the paths are used exactly as recorded.
+func projectRoots(ctx *appContext) []string {
+	rows, err := ctx.st.Sessions(store.Filter{Since: ctx.filter.Since, Until: ctx.filter.Until, Project: ctx.filter.Project})
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var roots []string
+	for _, r := range rows {
+		if r.Project == "" || seen[r.Project] {
+			continue
+		}
+		seen[r.Project] = true
+		roots = append(roots, r.Project)
+	}
+	return roots
 }

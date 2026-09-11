@@ -107,7 +107,7 @@ func (requestedModelRule) Run(in Input) (*Finding, error) {
 			}
 		}
 	}
-	f.WhatToChange = requestedWhatToChange(found)
+	f.WhatToChange = requestedWhatToChange(in, found)
 	f.WhatToExpect = "The requested and actual columns in `tallybook agents` should match after this. " +
 		"If they still differ, the override is coming from somewhere else and the agent file is not the culprit."
 	f.Evidence = requestedEvidence(found)
@@ -192,29 +192,59 @@ func requestedWhyItCosts(in Input, found []mismatch, saving float64) string {
 		ratio, fmtUSD(paid), fmtUSD(asked))
 }
 
-func requestedWhatToChange(found []mismatch) string {
-	parts := []string{
-		"An agent's own file can set a model at the top. When it does, that setting wins over the model " +
-			"you ask for when you launch it.",
-	}
+// requestedWhatToChange explains where the override is coming from. Claude
+// Code resolves a sub-agent's model in this order: the model passed at the
+// call site, then the agent file's frontmatter, then CLAUDE_CODE_SUBAGENT_MODEL,
+// then the main conversation's model. The call site wins, so a run that did not
+// honour the request was almost never overridden by the agent file.
+//
+// Order verified 2026-09-11 against code.claude.com/docs/en/sub-agents.
+func requestedWhatToChange(in Input, found []mismatch) string {
+	var parts []string
 	seen := map[string]bool{}
 	for _, m := range found {
 		if seen[m.agentType] {
 			continue
 		}
 		seen[m.agentType] = true
-		if file := agentFile(m.agentType); file != "" {
+
+		def, haveFile := in.Agents.Lookup(m.agentType)
+		switch {
+		case haveFile && def.SetsModel() && in.Prices.SameModel(def.Model, m.actual):
 			parts = append(parts, fmt.Sprintf(
-				"Either remove the model line from %s so the caller's choice is used, or set it there to the "+
-					"model you actually want. Pick one place to decide and stick to it.", file))
-			continue
+				"%s already says %s in %s, and that is what the runs used. What did not survive is the %s you "+
+					"asked for at the launch. Whatever is passing that model is being ignored, or is not "+
+					"reaching the launch at all: check the call site.",
+				def.Name, def.Model, def.Path, m.requested))
+		case haveFile && def.SetsModel():
+			parts = append(parts, fmt.Sprintf(
+				"%s sets %s, the launch asked for %s, and the runs used %s. None of those agree, so start by "+
+					"deciding which one you meant and making the other two match it.",
+				def.Path, def.Model, m.requested, modelDisplay(m.actual)))
+		case haveFile:
+			parts = append(parts, fmt.Sprintf(
+				"%s does not pin a model%s, so these runs fell back to whatever was in force. Add the model you "+
+					"want to the block at the top of that file:\n\n    model: %s\n",
+				def.Path, inheritNote(def.Model), shortModelName(m.requested)))
+		default:
+			parts = append(parts, fmt.Sprintf(
+				"There is no file for %s under .claude/agents, so the model can only be decided where it is "+
+					"launched, or by the session's own model. Check what the launch is passing.", m.agentType))
 		}
-		parts = append(parts, fmt.Sprintf(
-			"%s is built into the harness and has no file of its own, so the override is coming from somewhere "+
-				"else: check the model setting in ~/.claude/settings.json, which applies to every launch that "+
-				"does not name a model.", m.agentType))
 	}
+
+	parts = append(parts, "Worth knowing which way this resolves: the model passed when the agent is launched "+
+		"wins over the model line in the agent's own file. The file is the fallback, not the override.")
 	return strings.Join(parts, "\n\n")
+}
+
+// inheritNote spells out what an explicit "inherit" means, since it looks like
+// a setting but is a deliberate absence of one.
+func inheritNote(model string) string {
+	if strings.EqualFold(strings.TrimSpace(model), "inherit") {
+		return ` (it says "inherit", which asks for whatever model launched it)`
+	}
+	return ""
 }
 
 func requestedEvidence(found []mismatch) Table {

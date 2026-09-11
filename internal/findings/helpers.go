@@ -276,6 +276,16 @@ func frontmatterPatch(file, line string) string {
 		"+" + line + "\n"
 }
 
+// replaceLinePatch is a diff that swaps one frontmatter line for another.
+func replaceLinePatch(file, from, to string) string {
+	return "--- a/" + file + "\n" +
+		"+++ b/" + file + "\n" +
+		"@@ -1,3 +1,3 @@\n" +
+		" ---\n" +
+		"-" + from + "\n" +
+		"+" + to + "\n"
+}
+
 // plural returns "" for one and "s" for anything else.
 func plural(n int) string {
 	if n == 1 {

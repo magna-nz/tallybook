@@ -5,6 +5,7 @@
 package findings
 
 import (
+	"github.com/magna-nz/tallybook/internal/agentfile"
 	"sort"
 	"time"
 
@@ -68,6 +69,10 @@ type Finding struct {
 type Input struct {
 	Store  *store.Store
 	Prices *pricing.Table
+	// Agents is what the project's own sub-agent files say, so advice can be
+	// checked against the config rather than assuming it. A nil Set simply
+	// knows nothing and the advice falls back to the general case.
+	Agents agentfile.Set
 	Cfg    config.Findings
 	Plan   config.Plan
 	Filter store.Filter // the reporting window; Until zero means Now

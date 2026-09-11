@@ -2,6 +2,8 @@ package findings
 
 import (
 	"fmt"
+	"github.com/magna-nz/tallybook/internal/agentfile"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -71,6 +73,31 @@ func input(t *testing.T, st *store.Store) Input {
 }
 
 // usage is a compact literal for the token counts a turn reports.
+// agents writes sub-agent definition files into a temp project and returns
+// what the rules will read. Each spec is "name:model"; an empty model means a
+// file with no model line.
+func agents(t *testing.T, specs ...string) agentfile.Set {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir()) // keep the real ~/.claude/agents out of the test
+	root := t.TempDir()
+	dir := filepath.Join(root, ".claude", "agents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, spec := range specs {
+		name, modelID, _ := strings.Cut(spec, ":")
+		body := "---\nname: " + name + "\n"
+		if modelID != "" {
+			body += "model: " + modelID + "\n"
+		}
+		body += "---\nbody\n"
+		if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return agentfile.Load(root)
+}
+
 func usage(input, cacheRead, write5m, output, thinking int64) model.Usage {
 	return model.Usage{
 		Input: input, CacheRead: cacheRead, CacheWrite5m: write5m,
@@ -169,7 +196,9 @@ func TestReadOnlyAgentFires(t *testing.T) {
 	st := newStore(t)
 	readOnlyFixture(t, st, "p1", "researcher", "claude-opus-5", 5, nil)
 
-	f, err := readOnlyAgentRule{}.Run(input(t, st))
+	in := input(t, st)
+	in.Agents = agents(t, "researcher:")
+	f, err := readOnlyAgentRule{}.Run(in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -191,7 +220,7 @@ func TestReadOnlyAgentFires(t *testing.T) {
 	if !strings.Contains(f.Title, "Opus") {
 		t.Errorf("Title = %q, want it to name Opus", f.Title)
 	}
-	if !strings.Contains(f.Patch, ".claude/agents/researcher.md") {
+	if !strings.Contains(f.Patch, "researcher.md") {
 		t.Errorf("Patch = %q, want it to name the agent file", f.Patch)
 	}
 	if !strings.Contains(f.Patch, "+model: sonnet") {
@@ -284,7 +313,9 @@ func TestRequestedModelFires(t *testing.T) {
 	}
 	ingest(t, st, trs...)
 
-	f, err := requestedModelRule{}.Run(input(t, st))
+	in := input(t, st)
+	in.Agents = agents(t, "researcher:opus")
+	f, err := requestedModelRule{}.Run(in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -303,7 +334,7 @@ func TestRequestedModelFires(t *testing.T) {
 	if !strings.Contains(f.Title, "Opus") {
 		t.Errorf("Title = %q, want it to name what actually ran", f.Title)
 	}
-	if !strings.Contains(f.WhatToChange, ".claude/agents/researcher.md") {
+	if !strings.Contains(f.WhatToChange, "researcher.md") {
 		t.Errorf("WhatToChange = %q, want the agent file named", f.WhatToChange)
 	}
 	if !strings.Contains(f.WhatToChange, "wins over the model") {
@@ -328,7 +359,9 @@ func TestRequestedModelAliasCountsAsHonoured(t *testing.T) {
 	}
 	ingest(t, st, trs...)
 
-	f, err := requestedModelRule{}.Run(input(t, st))
+	in := input(t, st)
+	in.Agents = agents(t, "researcher:opus")
+	f, err := requestedModelRule{}.Run(in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -345,7 +378,9 @@ func TestRequestedModelCheaperThanAskedSavesNothing(t *testing.T) {
 	}
 	ingest(t, st, trs...)
 
-	f, err := requestedModelRule{}.Run(input(t, st))
+	in := input(t, st)
+	in.Agents = agents(t, "researcher:opus")
+	f, err := requestedModelRule{}.Run(in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -902,4 +937,112 @@ func TestReadOnlyAgentSilentWhenTokenizerMatches(t *testing.T) {
 	if f.Confidence != High {
 		t.Errorf("Confidence = %q, want high", f.Confidence)
 	}
+}
+
+// The advice must change with what the project already says, because telling
+// someone to set a model their file already sets reads as if the tool never
+// looked at the project.
+func TestReadOnlyAdviceReadsTheAgentFile(t *testing.T) {
+	cases := []struct {
+		name       string
+		file       string // spec for agents(), "" means no file at all
+		wantText   []string
+		wantNoText []string
+		wantPatch  bool
+	}{
+		{
+			name:      "no model line: add one",
+			file:      "researcher:",
+			wantText:  []string{"does not pin a model", "model: sonnet"},
+			wantPatch: true,
+		},
+		{
+			name:       "already says sonnet: the call site is the problem",
+			file:       "researcher:sonnet",
+			wantText:   []string{"already says sonnet", "wins over the file"},
+			wantNoText: []string{"Add this line", "Change the model line"},
+			wantPatch:  false,
+		},
+		{
+			name:      "says inherit: that is not a pin",
+			file:      "researcher:inherit",
+			wantText:  []string{"does not pin a model", `"inherit"`, "model: sonnet"},
+			wantPatch: true,
+		},
+		{
+			name:      "says something else: swap it",
+			file:      "researcher:haiku",
+			wantText:  []string{"Change the model line", "from haiku to sonnet"},
+			wantPatch: true,
+		},
+		{
+			name:      "no file: offer to create one",
+			file:      "",
+			wantText:  []string{"There is no", "name: researcher", "model: sonnet"},
+			wantPatch: false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			st := newStore(t)
+			readOnlyFixture(t, st, "p1", "researcher", "claude-opus-5", 5, nil)
+
+			in := input(t, st)
+			if c.file == "" {
+				in.Agents = agents(t)
+			} else {
+				in.Agents = agents(t, c.file)
+			}
+
+			f, err := readOnlyAgentRule{}.Run(in)
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if f == nil {
+				t.Fatal("expected a finding")
+			}
+			for _, want := range c.wantText {
+				if !strings.Contains(f.WhatToChange, want) {
+					t.Errorf("WhatToChange missing %q:\n%s", want, f.WhatToChange)
+				}
+			}
+			for _, unwanted := range c.wantNoText {
+				if strings.Contains(f.WhatToChange, unwanted) {
+					t.Errorf("WhatToChange should not contain %q:\n%s", unwanted, f.WhatToChange)
+				}
+			}
+			if got := f.Patch != ""; got != c.wantPatch {
+				t.Errorf("patch present = %v, want %v (patch: %q)", got, c.wantPatch, f.Patch)
+			}
+			assertPlainEnglish(t, *f)
+		})
+	}
+}
+
+// Claude Code resolves a sub-agent's model at the call site first and the
+// agent file second. The advice has to say it that way round.
+func TestRequestedModelStatesPrecedenceCorrectly(t *testing.T) {
+	st := newStore(t)
+	ingest(t, st, parentWithLaunches("p1", "researcher", "sonnet", "claude-sonnet-5", 3))
+	for i := 0; i < 3; i++ {
+		ingest(t, st, agentRun("p1", i, "claude-opus-5", []string{"Read"}))
+	}
+
+	in := input(t, st)
+	in.Agents = agents(t, "researcher:sonnet")
+	f, err := requestedModelRule{}.Run(in)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if f == nil {
+		t.Fatal("expected a finding when the requested model was not used")
+	}
+	if !strings.Contains(f.WhatToChange, "wins over the model line in the agent's own file") {
+		t.Errorf("precedence stated wrongly or not at all:\n%s", f.WhatToChange)
+	}
+	if strings.Contains(f.WhatToChange, "that setting wins over the model") {
+		t.Error("the old, reversed precedence claim is still present")
+	}
+	assertPlainEnglish(t, *f)
 }

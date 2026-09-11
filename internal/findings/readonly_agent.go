@@ -144,12 +144,12 @@ func (r readOnlyAgentRule) Run(in Input) (*Finding, error) {
 
 	f.WhatHappened = readOnlyWhatHappened(in, groups, totalRuns)
 	f.WhyItCosts = readOnlyWhyItCosts(in, groups[0])
-	f.WhatToChange = readOnlyWhatToChange(groups)
+	f.WhatToChange = readOnlyWhatToChange(in, groups)
 	f.WhatToExpect = readOnlyWhatToExpect(groups, current, altTotal)
 	if c := tokenizerCaveat(groups[0].modelID, groups[0].alt); c != "" {
 		f.WhyItCosts += "\n\n" + c
 	}
-	f.Patch = readOnlyPatch(groups)
+	f.Patch = readOnlyPatch(in, groups)
 	f.Evidence = readOnlyEvidence(groups)
 	return f, nil
 }
@@ -207,21 +207,48 @@ func readOnlyWhyItCosts(in Input, top *roGroup) string {
 		"so you pay the premium without getting the benefit.", name, rate, alt)
 }
 
-func readOnlyWhatToChange(groups []*roGroup) string {
+// readOnlyWhatToChange writes the change to make, checked against what the
+// project's agent files already say. Telling someone to set a model their file
+// already sets is worse than saying nothing: it reads as if the tool never
+// looked. Where the file already agrees, the call site is the thing to change,
+// because that is what wins.
+func readOnlyWhatToChange(in Input, groups []*roGroup) string {
 	var parts []string
 	for _, g := range groups {
 		short := shortModelName(g.alt)
-		if file := agentFile(g.agentType); file != "" {
+		def, haveFile := in.Agents.Lookup(g.agentType)
+
+		switch {
+		case haveFile && def.SetsModel() && in.Prices.SameModel(def.Model, g.alt):
 			parts = append(parts, fmt.Sprintf(
-				"Open %s and add this line to the block at the top of the file:\n\n    model: %s\n",
-				file, short))
-			continue
+				"%s already says %s, so the file is not what is putting these runs on %s. The model passed "+
+					"when the agent is launched wins over the file, so that is where to look. Drop it from "+
+					"the launch and the file's %s will be used.",
+				def.Path, def.Model, modelDisplay(g.modelID), def.Model))
+
+		case haveFile && def.SetsModel():
+			parts = append(parts, fmt.Sprintf(
+				"Change the model line in %s from %s to %s:\n\n    model: %s\n",
+				def.Path, def.Model, short, short))
+
+		case haveFile:
+			parts = append(parts, fmt.Sprintf(
+				"%s does not pin a model%s. Add this line to the block at the top of the file:\n\n    model: %s\n",
+				def.Path, inheritNote(def.Model), short))
+
+		case agentFile(g.agentType) != "":
+			parts = append(parts, fmt.Sprintf(
+				"There is no %s yet. Create it with this at the top, and the agent will use %s from then on:"+
+					"\n\n    ---\n    name: %s\n    model: %s\n    ---\n",
+				agentFile(g.agentType), short, g.agentType, short))
+
+		default:
+			parts = append(parts, fmt.Sprintf(
+				"%s is built into the harness and has no file of its own, so pass model: %q when you launch it.",
+				g.agentType, short))
 		}
-		parts = append(parts, fmt.Sprintf(
-			"When you launch %s, pass model: %q in the Agent call. This type has no file of its own, "+
-				"so the call site is the only place the choice can be made.", g.agentType, short))
 	}
-	return strings.TrimRight(strings.Join(parts, "\n"), "\n")
+	return strings.TrimRight(strings.Join(parts, "\n\n"), "\n")
 }
 
 func readOnlyWhatToExpect(groups []*roGroup, current, alt float64) string {
@@ -235,11 +262,21 @@ func readOnlyWhatToExpect(groups []*roGroup, current, alt float64) string {
 		"The next report will show whether the error rate moved.", display, fmtPct(share))
 }
 
-func readOnlyPatch(groups []*roGroup) string {
+func readOnlyPatch(in Input, groups []*roGroup) string {
 	var b strings.Builder
 	for _, g := range groups {
-		if file := agentFile(g.agentType); file != "" {
-			b.WriteString(frontmatterPatch(file, "model: "+shortModelName(g.alt)))
+		def, haveFile := in.Agents.Lookup(g.agentType)
+		if !haveFile {
+			continue // nothing on disk to patch
+		}
+		want := "model: " + shortModelName(g.alt)
+		switch {
+		case def.SetsModel() && in.Prices.SameModel(def.Model, g.alt):
+			continue // the file already says it; the change belongs at the call site
+		case def.Model != "":
+			b.WriteString(replaceLinePatch(def.Path, "model: "+def.Model, want))
+		default:
+			b.WriteString(frontmatterPatch(def.Path, want))
 		}
 	}
 	return b.String()
