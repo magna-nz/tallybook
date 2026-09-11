@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -209,6 +210,11 @@ func TestSetupHookWriteWithInvalidJSONFailsAndLeavesFileUntouched(t *testing.T) 
 // settings.json can hold secrets in its env block. A user who set it to 0600
 // meant it, and writing the file back must not widen that.
 func TestSetupHookPreservesFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows has no Unix permission bits; Go reports 0666 for any
+		// writable file, so there is nothing here to preserve or to check.
+		t.Skip("file modes are not meaningful on Windows")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	dir := filepath.Join(home, ".claude")
