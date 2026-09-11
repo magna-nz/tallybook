@@ -110,8 +110,8 @@ func TestFindingsInfoShowsNoSaving(t *testing.T) {
 	if strings.Contains(out, "$") {
 		t.Errorf("an Info finding should carry no money figure:\n%s", out)
 	}
-	if !strings.Contains(out, "do not downgrade") {
-		t.Errorf("findings output missing the Info label:\n%s", out)
+	if strings.Contains(out, "confidence") || strings.Contains(out, "do not downgrade") {
+		t.Errorf("findings list lines should carry no confidence label:\n%s", out)
 	}
 }
 

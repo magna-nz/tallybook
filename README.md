@@ -28,21 +28,21 @@ Last 30 days                     share list-price equiv.
 
 Top findings (estimated saving / month)
 
- 1.     20%   Long sessions pay to carry their own history     medium confidence
+ 1.     20%   Long sessions pay to carry their own history
               27 sessions in the last 30 days grew past 100,000 tokens of conversation.
- 2.      2%   Thinking was spent on turns that did no thinking low confidence
+ 2.      2%   Thinking was spent on turns that did no thinking
               On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
- 3.      1%   Your saved context was rebuilt mid-session       medium confidence
+ 3.      1%   Your saved context was rebuilt mid-session
               In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
- 4.      1%   An hour of cache lifetime went unused            low confidence
+ 4.      1%   An hour of cache lifetime went unused
               In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
- 5.      1%   Identical tool calls were repeated               medium confidence
+ 5.      1%   Identical tool calls were repeated
               In 9 sessions in the last 30 days, a read-only tool was called with the same input…
 
 Also worth knowing
 
- 8. 8 sessions look under-powered                              do not downgrade
- 9. Your plan is paying for itself                             informational
+ 8. 8 sessions look under-powered
+ 9. Your plan is paying for itself
 
 2 more findings. Run `tallybook findings` to see them all.
 

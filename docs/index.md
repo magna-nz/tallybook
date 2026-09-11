@@ -43,21 +43,21 @@ Last 30 days                     share list-price equiv.
 
 Top findings (estimated saving / month)
 
- 1.     20%   Long sessions pay to carry their own history     medium confidence
+ 1.     20%   Long sessions pay to carry their own history
               27 sessions in the last 30 days grew past 100,000 tokens of conversation.
- 2.      2%   Thinking was spent on turns that did no thinking low confidence
+ 2.      2%   Thinking was spent on turns that did no thinking
               On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
- 3.      1%   Your saved context was rebuilt mid-session       medium confidence
+ 3.      1%   Your saved context was rebuilt mid-session
               In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
- 4.      1%   An hour of cache lifetime went unused            low confidence
+ 4.      1%   An hour of cache lifetime went unused
               In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
- 5.      1%   Identical tool calls were repeated               medium confidence
+ 5.      1%   Identical tool calls were repeated
               In 9 sessions in the last 30 days, a read-only tool was called with the same input…
 
 Also worth knowing
 
- 8. 8 sessions look under-powered                              do not downgrade
- 9. Your plan is paying for itself                             informational
+ 8. 8 sessions look under-powered
+ 9. Your plan is paying for itself
 
 2 more findings. Run `tallybook findings` to see them all.
 
@@ -79,38 +79,38 @@ Every finding in this window (estimated saving / month)
 
 Move work to a cheaper model
 
- 6.     <1%   Read-only sub-agents ran on Opus                 medium confidence
+ 6.     <1%   Read-only sub-agents ran on Opus
               4 times in the last 30 days you launched a researcher agent and it only read files…
- 7.     <1%   Short look-ups ran on Opus                       medium confidence
+ 7.     <1%   Short look-ups ran on Opus
               8 of your own sessions in the last 30 days ran to 10 turns or fewer and only read:…
 
 Shrink what is sent every turn
 
- 1.     20%   Long sessions pay to carry their own history     medium confidence
+ 1.     20%   Long sessions pay to carry their own history
               27 sessions in the last 30 days grew past 100,000 tokens of conversation.
- 5.      1%   Identical tool calls were repeated               medium confidence
+ 5.      1%   Identical tool calls were repeated
               In 9 sessions in the last 30 days, a read-only tool was called with the same input…
 
 Keep the prompt cache warm
 
- 3.      1%   Your saved context was rebuilt mid-session       medium confidence
+ 3.      1%   Your saved context was rebuilt mid-session
               In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
- 4.      1%   An hour of cache lifetime went unused            low confidence
+ 4.      1%   An hour of cache lifetime went unused
               In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
 
 Lower thinking effort
 
- 2.      2%   Thinking was spent on turns that did no thinking low confidence
+ 2.      2%   Thinking was spent on turns that did no thinking
               On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
 
 A setting is not doing what you think
 
- 9.      --   Your plan is paying for itself                   informational
+ 9.      --   Your plan is paying for itself
               At list price, your usage in the last 30 days works out to about $1,289.13 a month,…
 
 Needs a stronger model or a better brief
 
- 8.      --   8 sessions look under-powered                    do not downgrade
+ 8.      --   8 sessions look under-powered
               Sessions 81fd6a4a, bed422e3, 086db154 and 5 more tried the same kind of action 3 or…
 
 Run `tallybook finding <n>` for evidence and the change to make.

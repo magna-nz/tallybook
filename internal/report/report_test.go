@@ -80,10 +80,13 @@ func TestReportContainsKeyLines(t *testing.T) {
 		"$141.70",
 		"Top findings (estimated saving / month)",
 		"Read-only sub-agents ran on Opus",
-		"high confidence",
-		"do not downgrade",
 		"Run `tallybook finding <n>` for evidence and the change to make.",
 		"Prices are Anthropic and OpenAI list prices, verified 2026-09-10.",
+	}
+	// The confidence label was dropped from the list lines: it read as noise
+	// next to the money, and the finding's own text says how strong it is.
+	if strings.Contains(out, "confidence") {
+		t.Errorf("Report list lines should not carry a confidence label:\n%s", out)
 	}
 	for _, want := range wantSubstrings {
 		if !strings.Contains(out, want) {

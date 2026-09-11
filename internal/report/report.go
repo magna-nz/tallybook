@@ -162,20 +162,20 @@ func writeTopFindings(w io.Writer, top TopFindings, minSavingUSD float64, plan c
 }
 
 // writeFindingLine writes one report row plus its indented first-sentence
-// continuation: " N. $58   Title                                    high confidence".
+// continuation: " N.   $58.00   Title". The confidence is deliberately not on
+// the line: it read as noise next to the money, and the finding's own text
+// says whether its number is measured or estimated. It stays in --json.
 func writeFindingLine(w io.Writer, n int, f findings.Finding, plan config.Plan) {
 	money := findingMoneyField(f, plan)
-	conf := confidenceLabel(f)
 	// Seven characters of money: a three-figure monthly saving is not rare.
-	fmt.Fprintf(w, "%2d. %7s   %-48s %s\n", n, money, truncate(f.Title, 48), conf)
+	fmt.Fprintf(w, "%2d. %7s   %s\n", n, money, f.Title)
 	fmt.Fprintf(w, "%14s%s\n", "", firstSentence(f.WhatHappened))
 }
 
 // writeNoteLine writes one Info finding as a single line, with no money
-// column and no continuation sentence, its label aligned with the
-// confidence column of the priced rows above it.
+// column and no continuation sentence.
 func writeNoteLine(w io.Writer, n int, f findings.Finding) {
-	fmt.Fprintf(w, "%2d. %-58s %s\n", n, truncate(f.Title, 58), confidenceLabel(f))
+	fmt.Fprintf(w, "%2d. %s\n", n, f.Title)
 }
 
 // dateRange formats an earliest/latest pair like "Jun 12 – Sep 10". A zero
