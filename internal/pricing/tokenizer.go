@@ -83,3 +83,24 @@ func TokenizerDrift(from, to string) int {
 	}
 	return 0 // across vendors there is no published ratio to reason with
 }
+
+// DisplayName is how a model id reads in a sentence: "Opus 5", "Sonnet 5",
+// "Haiku 4.5". Unlike a bare family name it keeps the version, which matters
+// wherever two versions of one family are being compared. Ids the table does
+// not know are returned as written.
+func DisplayName(modelID string) string {
+	id, ok := Default().Canonical(modelID)
+	if !ok {
+		return strings.TrimSpace(modelID)
+	}
+	rest, isClaude := strings.CutPrefix(id, "claude-")
+	if !isClaude {
+		return id // OpenAI ids read fine as they are
+	}
+	family, version, hasVersion := strings.Cut(rest, "-")
+	name := strings.ToUpper(family[:1]) + family[1:]
+	if !hasVersion {
+		return name
+	}
+	return name + " " + strings.ReplaceAll(version, "-", ".")
+}

@@ -57,11 +57,14 @@ and what would have been cheaper. Nothing leaves your machine.`,
 	root.AddCommand(newReportCmd(flags))
 	root.AddCommand(newFindingCmd(flags))
 	root.AddCommand(newAgentsCmd(flags))
+	root.AddCommand(newChangesCmd(flags))
 	root.AddCommand(newSessionsCmd(flags))
 	root.AddCommand(newSessionCmd(flags))
 	root.AddCommand(newStatusCmd(flags))
 	root.AddCommand(newPricesCmd(flags))
 	root.AddCommand(newConfigCmd())
+	root.AddCommand(newHookCmd(flags))
+	root.AddCommand(newSetupCmd())
 
 	return root
 }

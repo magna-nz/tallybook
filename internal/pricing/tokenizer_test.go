@@ -62,3 +62,22 @@ func TestTokenizerDrift(t *testing.T) {
 		}
 	}
 }
+
+func TestDisplayName(t *testing.T) {
+	cases := map[string]string{
+		"claude-opus-5":          "Opus 5",
+		"claude-sonnet-5":        "Sonnet 5",
+		"claude-haiku-4-5":       "Haiku 4.5",
+		"claude-opus-4-8":        "Opus 4.8",
+		"claude-fable-5-1":       "Fable 5.1",
+		"opus":                   "Opus 5", // alias resolves first
+		"claude-opus-5-20260401": "Opus 5",
+		"gpt-5.5":                "gpt-5.5",
+		"something-unknown":      "something-unknown",
+	}
+	for id, want := range cases {
+		if got := DisplayName(id); got != want {
+			t.Errorf("DisplayName(%q) = %q, want %q", id, got, want)
+		}
+	}
+}

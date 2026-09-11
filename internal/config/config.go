@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -71,13 +72,20 @@ func Default() Config {
 }
 
 // Dir is where tallybook keeps its config and database:
-// $TALLYBOOK_DIR, else $XDG_CONFIG_HOME/tallybook, else ~/.config/tallybook.
+// $TALLYBOOK_DIR, else $XDG_CONFIG_HOME/tallybook, else (on Windows only,
+// where XDG_CONFIG_HOME is not a convention) os.UserConfigDir()/tallybook,
+// else ~/.config/tallybook.
 func Dir() string {
 	if d := os.Getenv("TALLYBOOK_DIR"); d != "" {
 		return d
 	}
 	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
 		return filepath.Join(x, "tallybook")
+	}
+	if runtime.GOOS == "windows" {
+		if dir, err := os.UserConfigDir(); err == nil {
+			return filepath.Join(dir, "tallybook")
+		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
