@@ -8,6 +8,7 @@
     <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-server-005FBA" alt="MCP server" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   </p>
+  <p><a href="https://magna-nz.github.io/tallybook/">Documentation</a></p>
 </div>
 
 <br />
