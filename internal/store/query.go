@@ -31,9 +31,11 @@ func (f Filter) whereClause() (string, []interface{}) {
 		args = append(args, f.Until.UnixNano())
 	}
 	if f.Project != "" {
-		if strings.HasSuffix(f.Project, "/") {
+		// A trailing separator asks for everything under that directory.
+		// Windows users type a backslash, so both count.
+		if strings.HasSuffix(f.Project, "/") || strings.HasSuffix(f.Project, `\`) {
 			conds = append(conds, "project LIKE ?")
-			args = append(args, f.Project+"%")
+			args = append(args, strings.TrimRight(f.Project, `/\`)+"/%")
 		} else {
 			conds = append(conds, "project = ?")
 			args = append(args, f.Project)

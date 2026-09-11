@@ -312,3 +312,57 @@ func TestChangesOrdersDecidedVerdictsFirst(t *testing.T) {
 		t.Errorf("expected the undecided change last, got %+v", changes[1])
 	}
 }
+
+// Dispatching a wave of sub-agents with mixed models puts runs of both on the
+// timeline at once. That is not a change from one model to the other, and
+// reading it as one is exactly what this user's real history produced.
+func TestChangesIgnoresConcurrentRunsOfDifferentModels(t *testing.T) {
+	st := newStore(t)
+
+	// Five opus runs and five sonnet runs, all launched within the same few
+	// minutes and all still running when the next began.
+	var specs []runSpec
+	for i := 0; i < 5; i++ {
+		specs = append(specs, runSpec{
+			model: "claude-opus-5", at: start.Add(time.Duration(i) * time.Minute),
+			toolCalls: 5,
+		})
+		specs = append(specs, runSpec{
+			model: "claude-sonnet-5", at: start.Add(time.Duration(i)*time.Minute + 30*time.Second),
+			toolCalls: 5,
+		})
+	}
+	buildAgentRuns(t, st, "wave", "implementer", specs)
+
+	changes, err := ledger.Changes(st, pricing.Default(), store.Filter{}, 3)
+	if err != nil {
+		t.Fatalf("Changes: %v", err)
+	}
+	for _, c := range changes {
+		t.Errorf("runs that overlapped in time were read as a change: %s %s to %s at %s",
+			c.Agent, c.From, c.To, c.At.Format(time.RFC3339))
+	}
+}
+
+// A real switch, where every run of the old model finished before the first
+// run of the new one started, must still be found.
+func TestChangesStillFindsASequentialSwitch(t *testing.T) {
+	st := newStore(t)
+
+	var specs []runSpec
+	specs = append(specs, runsAt("claude-opus-5", start, 5, 5, 0)...)
+	// A clear day between the two groups, so nothing overlaps.
+	specs = append(specs, runsAt("claude-sonnet-5", start.Add(24*time.Hour), 5, 5, 0)...)
+	buildAgentRuns(t, st, "seq", "implementer", specs)
+
+	changes, err := ledger.Changes(st, pricing.Default(), store.Filter{}, 3)
+	if err != nil {
+		t.Fatalf("Changes: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("a genuine sequential switch should still be found, got %d changes", len(changes))
+	}
+	if changes[0].MinRuns != 3 {
+		t.Errorf("MinRuns = %d, want the threshold it was judged against", changes[0].MinRuns)
+	}
+}

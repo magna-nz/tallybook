@@ -16,19 +16,44 @@ import (
 // working. Keep them in step with internal/ledger/changes.go.
 const (
 	changesErrorRiseRevert = 0.10
-	// changesDefaultMinRuns is the "too early" wait we tell the reader about.
+	// changesDefaultMinRuns is only a fallback for a Change built without its
+	// threshold; the real number comes from Change.MinRuns, which honours
+	// --min-runs.
 	// ledger.Change does not carry the minRuns a caller passed to
 	// ledger.Changes, so this assumes the documented default of 3.
 	changesDefaultMinRuns = 3
 )
 
 // Changes writes one block per model change, newest first.
-func Changes(w io.Writer, cs []ledger.Change, plan config.Plan) error {
+// Changes renders decided verdicts in full. Undecided ones are counted rather
+// than printed: "too early to tell" carries no information by definition, and
+// on a history where waves of sub-agents are dispatched with mixed models they
+// outnumber the decided verdicts several times over. Pass showAll to print
+// them anyway.
+func Changes(w io.Writer, cs []ledger.Change, plan config.Plan, showAll bool) error {
 	bw := bufio.NewWriter(w)
 
-	if len(cs) == 0 {
-		msg := "No model changes in this window. Change an agent's model and the next report " +
-			"will tell you whether it helped."
+	decided := cs
+	undecided := 0
+	if !showAll {
+		decided = decided[:0:0]
+		for _, c := range cs {
+			if c.Verdict == ledger.VerdictTooEarly {
+				undecided++
+				continue
+			}
+			decided = append(decided, c)
+		}
+	}
+
+	if len(decided) == 0 {
+		msg := "No model changes in this window with enough runs to judge. Change an agent's " +
+			"model and the next report will tell you whether it helped."
+		if undecided > 0 {
+			msg = fmt.Sprintf("%d model change%s in this window, none with enough runs on both "+
+				"sides to judge yet. Run `tallybook changes --all` to see them.",
+				undecided, plural(undecided))
+		}
 		for _, line := range wrapText(msg, 76) {
 			fmt.Fprintln(bw, line)
 		}
@@ -40,7 +65,7 @@ func Changes(w io.Writer, cs []ledger.Change, plan config.Plan) error {
 		costLabel = "each (" + moneyHeader(plan) + ")"
 	}
 
-	for i, c := range cs {
+	for i, c := range decided {
 		if i > 0 {
 			fmt.Fprintln(bw)
 		}
@@ -61,6 +86,15 @@ func Changes(w io.Writer, cs []ledger.Change, plan config.Plan) error {
 
 		for _, line := range wrapText(verdictSentence(c), 76) {
 			fmt.Fprintln(bw, "  "+line)
+		}
+	}
+
+	if undecided > 0 {
+		fmt.Fprintln(bw)
+		msg := fmt.Sprintf("%d more change%s had too few runs on one side to judge. "+
+			"`tallybook changes --all` shows them.", undecided, plural(undecided))
+		for _, line := range wrapText(msg, 76) {
+			fmt.Fprintln(bw, line)
 		}
 	}
 
@@ -96,7 +130,11 @@ func tooEarlySentence(c ledger.Change) string {
 	if c.Before.Runs < c.After.Runs {
 		side, runs = "before the switch", c.Before.Runs
 	}
-	need := changesDefaultMinRuns - runs
+	minRuns := c.MinRuns
+	if minRuns < 1 {
+		minRuns = changesDefaultMinRuns
+	}
+	need := minRuns - runs
 	if need < 1 {
 		need = 1
 	}

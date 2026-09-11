@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -60,5 +61,28 @@ func TestExampleParses(t *testing.T) {
 	t.Setenv("TALLYBOOK_PLAN", "")
 	if _, err := LoadFrom(p); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A Windows user writes "~\path". Leaving it literal would create a directory
+// called "~" wherever the tool happened to be run from.
+func TestExpandHomeAcceptsBothSeparators(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("TALLYBOOK_PLAN", "")
+
+	for _, raw := range []string{"~/tallybook/x.db", `~\tallybook\x.db`} {
+		t.Setenv("TALLYBOOK_DB", raw)
+		cfg, err := LoadFrom(filepath.Join(t.TempDir(), "nope.toml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.HasPrefix(cfg.DBPath, "~") {
+			t.Errorf("%q was left unexpanded: %q", raw, cfg.DBPath)
+		}
+		if filepath.Base(cfg.DBPath) != "x.db" {
+			t.Errorf("%q expanded to %q, which does not end at the file", raw, cfg.DBPath)
+		}
 	}
 }

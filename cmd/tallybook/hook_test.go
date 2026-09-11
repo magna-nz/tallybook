@@ -277,3 +277,37 @@ func TestHookSessionEndNeverScansEverything(t *testing.T) {
 		}
 	}
 }
+
+// The log is a file the tool creates and nothing else prunes, so it must not
+// grow without limit.
+func TestSessionLogIsCapped(t *testing.T) {
+	e2eEnv(t)
+	path := filepath.Join(os.Getenv("TALLYBOOK_DIR"), sessionLogName)
+
+	// Start well over the cap, ending on a line boundary.
+	big := strings.Repeat("2026-09-11T00:00:00Z  an old line\n", (sessionLogMaxBytes/34)+200)
+	if err := os.WriteFile(path, []byte(big), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.Stat(path)
+	if before.Size() <= sessionLogMaxBytes {
+		t.Fatalf("test setup did not exceed the cap: %d", before.Size())
+	}
+
+	appendSessionLog("tallybook: a new line")
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Size() >= before.Size() {
+		t.Errorf("log was not trimmed: %d then %d bytes", before.Size(), after.Size())
+	}
+	body, _ := os.ReadFile(path)
+	if !strings.HasSuffix(string(body), "a new line\n") {
+		t.Error("the new line should be the last one in the file")
+	}
+	if strings.HasPrefix(string(body), "\n") {
+		t.Error("trimming should leave the file starting on a whole line")
+	}
+}

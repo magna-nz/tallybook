@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -75,11 +76,6 @@ func newHookSessionEndCmd(flags *globalFlags) *cobra.Command {
 	}
 }
 
-// hookWatchdog is the wall-clock budget the hook holds itself to. Claude Code
-// abandons a SessionEnd hook after about 1.5 seconds; finishing early and
-// silently is better than being killed mid-write.
-const hookWatchdog = 1200 * time.Millisecond
-
 // runHookSessionEnd does the real work. Every failure path returns silently
 // rather than propagating an error: a hook that makes noise or fails a session
 // is worse than one that does nothing.
@@ -89,19 +85,6 @@ func runHookSessionEnd(cmd *cobra.Command, flags *globalFlags) {
 		// session, however this command misbehaves.
 		_ = recover()
 	}()
-
-	// Whatever happens below, this returns before Claude Code loses patience.
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-done:
-		case <-time.After(hookWatchdog):
-			// The session is ending anyway; the ledger catches up on the next
-			// ordinary run of tallybook.
-			os.Exit(0)
-		}
-	}()
-	defer close(done)
 
 	in := readHookInput(cmd.InOrStdin())
 
@@ -118,11 +101,14 @@ func runHookSessionEnd(cmd *cobra.Command, flags *globalFlags) {
 	}
 	defer ctx.close()
 
+	// Parsed once: the transcript is the largest thing the hook touches, and
+	// reading it twice was doubling the work inside the tightest budget here.
+	var parsed *model.Transcript
 	if in.TranscriptPath != "" {
-		ingestOne(ctx, in.TranscriptPath)
+		parsed = ingestOne(ctx, in.TranscriptPath)
 	}
 
-	sessionID, ok := resolveHookSession(ctx, in)
+	sessionID, ok := resolveHookSession(ctx, in, parsed)
 	if !ok {
 		return
 	}
@@ -139,34 +125,64 @@ func runHookSessionEnd(cmd *cobra.Command, flags *globalFlags) {
 	fmt.Fprintln(cmd.OutOrStdout(), line)
 }
 
-// ingestOne reads a single transcript into the store. Used by the hook so a
-// session is recorded the moment it ends without rescanning everything.
-func ingestOne(ctx *appContext, path string) {
+// ingestOne reads a single transcript into the store and returns it, so the
+// caller can take the session id from it rather than parsing the file again.
+// A nil return means the file could not be used.
+func ingestOne(ctx *appContext, path string) *model.Transcript {
 	t, err := claude.Parse(path)
 	if err != nil {
-		return
+		return nil
 	}
 	fi, err := os.Stat(path)
 	if err != nil {
-		return
+		return t
 	}
 	_ = ctx.st.ReplaceTranscript(t, fi.Size(), fi.ModTime())
+	return t
 }
 
 // sessionLogName is the file the hook appends to. No hook's stdout reaches
 // the person at the keyboard, so this is where the line actually goes.
 const sessionLogName = "sessions.log"
 
+// sessionLogMaxBytes caps the log. One line per session forever is a file the
+// tool creates and never cleans up; past this size the oldest half is dropped.
+const sessionLogMaxBytes = 256 * 1024
+
 // appendSessionLog adds one dated line to the log, and says nothing if it
 // cannot: a log that fails to write must not disturb the session that ended.
 func appendSessionLog(line string) {
-	f, err := os.OpenFile(filepath.Join(config.Dir(), sessionLogName),
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	path := filepath.Join(config.Dir(), sessionLogName)
+	trimSessionLog(path)
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "%s  %s\n", time.Now().Format(time.RFC3339), line)
+}
+
+// trimSessionLog drops the older half of the log once it passes the cap. It
+// keeps whole lines, and gives up silently on any error.
+func trimSessionLog(path string) {
+	fi, err := os.Stat(path)
+	if err != nil || fi.Size() <= sessionLogMaxBytes {
+		return
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	keep := body[len(body)/2:]
+	if i := bytes.IndexByte(keep, '\n'); i >= 0 {
+		keep = keep[i+1:] // start at a line boundary
+	}
+	tmp := path + ".tmp"
+	if os.WriteFile(tmp, keep, 0o644) != nil {
+		return
+	}
+	_ = os.Rename(tmp, path)
 }
 
 // readHookInput reads and parses whatever JSON is waiting on r, giving up
@@ -198,12 +214,9 @@ func readHookInput(r io.Reader) hookInput {
 // resolveHookSession works out which session the summary is about: the one
 // named by the transcript path, else by the session id, else the most
 // recently started Claude Code session in the store.
-func resolveHookSession(ctx *appContext, in hookInput) (string, bool) {
-	if in.TranscriptPath != "" {
-		t, err := claude.Parse(in.TranscriptPath)
-		if err == nil && t.Session.ID != "" {
-			return t.Session.ID, true
-		}
+func resolveHookSession(ctx *appContext, in hookInput, parsed *model.Transcript) (string, bool) {
+	if parsed != nil && parsed.Session.ID != "" {
+		return parsed.Session.ID, true
 	}
 	if in.SessionID != "" {
 		return in.SessionID, true
@@ -234,9 +247,13 @@ func mostRecentClaudeSessionID(st *store.Store) (string, bool) {
 	return best.ID, true
 }
 
-// hookSummaryLine composes the one line the session-end hook records: the session's
-// cost, the share of its context that was tool output, and how many
-// findings are open in the default window.
+// hookSummaryLine composes the one line the session-end hook records: the
+// session's cost and the share of its context that was tool output.
+//
+// Everything here is scoped to the one session that just ended. An earlier
+// version also counted open findings, which walked every session in the window
+// and read every project's agent files, so the hook's cost grew with the
+// user's whole history inside a budget measured in milliseconds.
 func hookSummaryLine(ctx *appContext, row store.SessionRow) (string, bool) {
 	turns, err := ctx.st.Turns(row.ID)
 	if err != nil {
@@ -268,28 +285,14 @@ func hookSummaryLine(ctx *appContext, row store.SessionRow) (string, bool) {
 		}
 	}
 
-	_, totals, err := sessionsAndTotals(ctx)
-	if err != nil {
-		return "", false
-	}
-	fs, err := findingsFor(ctx, totals)
-	if err != nil {
-		return "", false
-	}
-
 	costPhrase := hookFmtUSD(usd)
 	if ctx.plan == config.PlanSubscription {
 		costPhrase += " list-price equiv."
 	}
 
-	findingWord := "findings"
-	if len(fs) == 1 {
-		findingWord = "finding"
-	}
-
 	return fmt.Sprintf(
-		"tallybook: this session %s, %s of context was tool output, %d %s across your %s",
-		costPhrase, hookFmtShare(toolShare), len(fs), findingWord, hookWindowPhrase(ctx.sinceFlag, ctx.window.Label),
+		"tallybook: this session %s, %s of context was tool output, %d turns",
+		costPhrase, hookFmtShare(toolShare), len(turns),
 	), true
 }
 

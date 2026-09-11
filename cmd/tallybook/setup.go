@@ -252,7 +252,13 @@ func (d *settingsDoc) writeAtomically(path string) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close %s: %w", tmpPath, err)
 	}
-	if err := os.Chmod(tmpPath, 0o644); err != nil {
+	// Keep whatever permissions the file already had: settings.json may hold
+	// secrets in its env block, and a user who set it to 0600 meant it.
+	mode := os.FileMode(0o600)
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
+	}
+	if err := os.Chmod(tmpPath, mode); err != nil {
 		return fmt.Errorf("chmod %s: %w", tmpPath, err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {

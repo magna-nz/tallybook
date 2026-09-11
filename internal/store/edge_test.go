@@ -88,3 +88,44 @@ func TestSourceFilter(t *testing.T) {
 		}
 	}
 }
+
+// A trailing separator on --project asks for everything under that directory.
+// Windows users type a backslash, and an earlier version silently returned
+// nothing for them.
+func TestProjectPrefixFilterAcceptsBothSeparators(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/t.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ts := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+
+	for i, project := range []string{"/repos/app/one", "/repos/app/two", "/repos/other"} {
+		s := model.Session{
+			ID: string(rune('a' + i)), Source: model.SourceClaudeCode,
+			Path: "/x/" + string(rune('a'+i)), Project: project, StartedAt: ts, EndedAt: ts,
+		}
+		if err := st.ReplaceTranscript(&model.Transcript{Session: s}, 1, ts); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, filter := range []string{"/repos/app/", `/repos/app\`} {
+		rows, err := st.Sessions(store.Filter{Project: filter})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rows) != 2 {
+			t.Errorf("Project %q matched %d sessions, want the 2 under /repos/app", filter, len(rows))
+		}
+	}
+
+	// Without a trailing separator it is still an exact match, not a prefix.
+	rows, err := st.Sessions(store.Filter{Project: "/repos/app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("an exact match on a directory with no sessions of its own should find none, got %d", len(rows))
+	}
+}

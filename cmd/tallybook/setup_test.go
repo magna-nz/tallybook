@@ -205,3 +205,30 @@ func TestSetupHookWriteWithInvalidJSONFailsAndLeavesFileUntouched(t *testing.T) 
 		}
 	}
 }
+
+// settings.json can hold secrets in its env block. A user who set it to 0600
+// meant it, and writing the file back must not widen that.
+func TestSetupHookPreservesFilePermissions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"model":"opus"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := run(t, "setup", "hook", "--write"); err != nil {
+		t.Fatalf("setup hook --write: %v", err)
+	}
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fi.Mode().Perm(); got != 0o600 {
+		t.Errorf("permissions widened from 0600 to %#o", got)
+	}
+}

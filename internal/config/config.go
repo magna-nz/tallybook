@@ -139,9 +139,11 @@ func applyEnv(cfg *Config) {
 }
 
 func expandHome(p string) string {
-	if strings.HasPrefix(p, "~/") {
+	// Both separators: a Windows user writes "~\\path", and leaving it literal
+	// would silently create a directory named "~".
+	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
 		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, p[2:])
+			return filepath.Join(home, filepath.FromSlash(strings.ReplaceAll(p[2:], `\`, "/")))
 		}
 	}
 	return p

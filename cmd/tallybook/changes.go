@@ -8,6 +8,7 @@ import (
 
 func newChangesCmd(flags *globalFlags) *cobra.Command {
 	var minRuns int
+	var showAll bool
 
 	cmd := &cobra.Command{
 		Use:   "changes",
@@ -17,14 +18,15 @@ func newChangesCmd(flags *globalFlags) *cobra.Command {
 			if minRuns < 1 {
 				return usageErrorf("--min-runs must be at least 1, got %d", minRuns)
 			}
-			return runChanges(cmd, flags, minRuns)
+			return runChanges(cmd, flags, minRuns, showAll)
 		},
 	}
 	cmd.Flags().IntVar(&minRuns, "min-runs", 3, "runs required on each side of a change before judging it")
+	cmd.Flags().BoolVar(&showAll, "all", false, "include changes with too few runs on one side to judge")
 	return cmd
 }
 
-func runChanges(cmd *cobra.Command, flags *globalFlags, minRuns int) error {
+func runChanges(cmd *cobra.Command, flags *globalFlags, minRuns int, showAll bool) error {
 	ctx, err := openApp(flags)
 	if err != nil {
 		return err
@@ -40,5 +42,5 @@ func runChanges(cmd *cobra.Command, flags *globalFlags, minRuns int) error {
 	if flags.json {
 		return report.ChangesJSON(out, cs)
 	}
-	return report.Changes(out, cs, ctx.plan)
+	return report.Changes(out, cs, ctx.plan, showAll)
 }

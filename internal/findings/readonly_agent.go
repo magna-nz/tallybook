@@ -83,7 +83,11 @@ func (r readOnlyAgentRule) Run(in Input) (*Finding, error) {
 		if typ == "" {
 			typ = "unnamed"
 		}
-		key := typ
+		// Keyed on the alternative, not just the agent type: an agent that ran
+		// on two different strong models has two different cheaper models to
+		// move to, and merging them would price the saving against a mixture
+		// while the advice named only one of them.
+		key := typ + "\x00" + alt
 		g := byKey[key]
 		if g == nil {
 			g = &roGroup{agentType: typ, modelID: canon, alt: alt, tools: map[string]int{}}

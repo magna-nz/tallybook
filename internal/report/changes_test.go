@@ -48,7 +48,7 @@ func buildChange(verdict ledger.Verdict) ledger.Change {
 func TestChangesKeepVerdict(t *testing.T) {
 	c := buildChange(ledger.VerdictKeep)
 	var buf bytes.Buffer
-	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanAPI); err != nil {
+	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanAPI, true); err != nil {
 		t.Fatalf("Changes: %v", err)
 	}
 	out := buf.String()
@@ -64,7 +64,7 @@ func TestChangesKeepVerdict(t *testing.T) {
 func TestChangesRevertVerdict(t *testing.T) {
 	c := buildChange(ledger.VerdictRevert)
 	var buf bytes.Buffer
-	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanAPI); err != nil {
+	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanAPI, true); err != nil {
 		t.Fatalf("Changes: %v", err)
 	}
 	out := buf.String()
@@ -85,7 +85,7 @@ func TestChangesRevertVerdict(t *testing.T) {
 func TestChangesTooEarlyVerdict(t *testing.T) {
 	c := buildChange(ledger.VerdictTooEarly)
 	var buf bytes.Buffer
-	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanAPI); err != nil {
+	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanAPI, true); err != nil {
 		t.Fatalf("Changes: %v", err)
 	}
 	out := buf.String()
@@ -101,7 +101,7 @@ func TestChangesTooEarlyVerdict(t *testing.T) {
 func TestChangesWatchVerdict(t *testing.T) {
 	c := buildChange(ledger.VerdictWatch)
 	var buf bytes.Buffer
-	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanAPI); err != nil {
+	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanAPI, true); err != nil {
 		t.Fatalf("Changes: %v", err)
 	}
 	out := buf.String()
@@ -116,11 +116,11 @@ func TestChangesWatchVerdict(t *testing.T) {
 
 func TestChangesNoChanges(t *testing.T) {
 	var buf bytes.Buffer
-	if err := report.Changes(&buf, nil, config.PlanAPI); err != nil {
+	if err := report.Changes(&buf, nil, config.PlanAPI, true); err != nil {
 		t.Fatalf("Changes: %v", err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "No model changes in this window.") {
+	if !strings.Contains(out, "No model changes in this window") {
 		t.Errorf("Changes(nil) missing the no-changes line:\n%s", out)
 	}
 	assertMaxLineWidth(t, out, 100)
@@ -129,7 +129,7 @@ func TestChangesNoChanges(t *testing.T) {
 func TestChangesSubscriptionLabelsEquivalent(t *testing.T) {
 	c := buildChange(ledger.VerdictKeep)
 	var buf bytes.Buffer
-	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanSubscription); err != nil {
+	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanSubscription, true); err != nil {
 		t.Fatalf("Changes: %v", err)
 	}
 	out := buf.String()
@@ -165,7 +165,7 @@ func TestChangesRendersDisplayNamesButJSONKeepsIDs(t *testing.T) {
 	}}
 
 	var text bytes.Buffer
-	if err := report.Changes(&text, cs, config.PlanAPI); err != nil {
+	if err := report.Changes(&text, cs, config.PlanAPI, true); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(text.String(), "Opus 5 to Haiku 4.5") {
@@ -194,7 +194,7 @@ func TestChangesSingularRun(t *testing.T) {
 		Verdict: ledger.VerdictTooEarly,
 	}}
 	var buf bytes.Buffer
-	if err := report.Changes(&buf, cs, config.PlanAPI); err != nil {
+	if err := report.Changes(&buf, cs, config.PlanAPI, true); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -221,7 +221,7 @@ func TestChangesPutsDecidedVerdictsFirst(t *testing.T) {
 	var buf bytes.Buffer
 	// Newer "too early" first on input; the renderer receives whatever the
 	// ledger ordered, so this asserts the ledger's ordering via Changes.
-	if err := report.Changes(&buf, []ledger.Change{keep, early}, config.PlanAPI); err != nil {
+	if err := report.Changes(&buf, []ledger.Change{keep, early}, config.PlanAPI, true); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -268,7 +268,7 @@ func TestChangesSentenceNeverContradictsTheTable(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := report.Changes(&buf, []ledger.Change{c.change}, config.PlanAPI); err != nil {
+			if err := report.Changes(&buf, []ledger.Change{c.change}, config.PlanAPI, true); err != nil {
 				t.Fatal(err)
 			}
 			out := buf.String()
@@ -283,5 +283,90 @@ func TestChangesSentenceNeverContradictsTheTable(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The "needs N more" figure must follow --min-runs, not a constant. Telling a
+// user to gather one more run when six are required wastes their time and the
+// verdict does not move.
+func TestChangesTooEarlyFollowsMinRuns(t *testing.T) {
+	c := ledger.Change{
+		Agent: "researcher", From: "claude-opus-5", To: "claude-sonnet-5",
+		At:      time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC),
+		Before:  ledger.Side{Runs: 2, AvgUSD: 1},
+		After:   ledger.Side{Runs: 9, AvgUSD: 1},
+		Verdict: ledger.VerdictTooEarly,
+		MinRuns: 8,
+	}
+	var buf bytes.Buffer
+	if err := report.Changes(&buf, []ledger.Change{c}, config.PlanAPI, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "6 more") {
+		t.Errorf("with --min-runs 8 and 2 runs it needs 6 more:\n%s", buf.String())
+	}
+}
+
+// "Too early to tell" carries no information, and on a history where waves of
+// sub-agents run with mixed models those entries outnumber the useful ones
+// several times over. They are counted by default, not printed.
+func TestChangesHidesUndecidedByDefault(t *testing.T) {
+	at := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	keep := ledger.Change{
+		Agent: "researcher", From: "claude-opus-5", To: "claude-sonnet-5", At: at,
+		Before:  ledger.Side{Runs: 6, AvgUSD: 2},
+		After:   ledger.Side{Runs: 6, AvgUSD: 1},
+		Verdict: ledger.VerdictKeep, MinRuns: 3,
+	}
+	early := ledger.Change{
+		Agent: "implementer", From: "claude-sonnet-5", To: "claude-opus-5", At: at,
+		Before:  ledger.Side{Runs: 1, AvgUSD: 1},
+		After:   ledger.Side{Runs: 1, AvgUSD: 2},
+		Verdict: ledger.VerdictTooEarly, MinRuns: 3,
+	}
+	cs := []ledger.Change{keep, early, early, early}
+
+	var quiet bytes.Buffer
+	if err := report.Changes(&quiet, cs, config.PlanAPI, false); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(quiet.String(), "implementer") {
+		t.Errorf("an undecided change was printed in full:\n%s", quiet.String())
+	}
+	if !strings.Contains(quiet.String(), "3 more changes had too few runs") {
+		t.Errorf("undecided changes should be counted:\n%s", quiet.String())
+	}
+	if !strings.Contains(quiet.String(), "researcher") {
+		t.Errorf("the decided change should still be shown:\n%s", quiet.String())
+	}
+
+	var all bytes.Buffer
+	if err := report.Changes(&all, cs, config.PlanAPI, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(all.String(), "implementer") {
+		t.Errorf("--all should print the undecided ones:\n%s", all.String())
+	}
+}
+
+// When every change is undecided, the reader is told that rather than being
+// shown an empty report that reads as "nothing happened".
+func TestChangesAllUndecidedSaysSo(t *testing.T) {
+	early := ledger.Change{
+		Agent: "implementer", From: "claude-sonnet-5", To: "claude-opus-5",
+		At:     time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC),
+		Before: ledger.Side{Runs: 1}, After: ledger.Side{Runs: 1},
+		Verdict: ledger.VerdictTooEarly, MinRuns: 3,
+	}
+	var buf bytes.Buffer
+	if err := report.Changes(&buf, []ledger.Change{early, early}, config.PlanAPI, false); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "2 model changes in this window, none with enough runs") {
+		t.Errorf("expected a count of undecided changes:\n%s", out)
+	}
+	if !strings.Contains(out, "--all") {
+		t.Errorf("expected the reader to be told how to see them:\n%s", out)
 	}
 }

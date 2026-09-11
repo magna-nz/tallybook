@@ -86,6 +86,7 @@ Numbers are illustrative. On a Max or Pro plan the dollar column becomes share o
 | Spend by session | `tallybook sessions --sort cost` |
 | One session in detail | `tallybook session 81fd6a4a` |
 | Did a change help? | `tallybook changes` |
+| Including ones too new to judge | `tallybook changes --all` |
 | Machine-readable | `tallybook --json` |
 | What was scanned | `tallybook status` |
 | The price table | `tallybook prices` |
@@ -100,7 +101,10 @@ The plan is read from Claude Code's login. Force it with `--currency usd|share` 
 ## Did it help?
 
 `tallybook changes` finds every point where a sub-agent's model changed and
-compares the runs either side of it.
+compares the runs either side of it. Runs that overlapped in time are not a
+change: dispatching a wave of sub-agents with mixed models is a choice, not a
+switch. Changes with too few runs on one side to judge are counted rather than
+printed; `--all` shows them.
 
 ```
 implementer: Opus 5 to Sonnet 5, 10 Sep                                 keep

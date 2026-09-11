@@ -43,12 +43,16 @@ type Change struct {
 	At            time.Time
 	Before, After Side
 	Verdict       Verdict
+	// MinRuns is the threshold this change was judged against, so a reader
+	// told it is "too early" can be given the right number of further runs.
+	MinRuns int
 }
 
 // runStat is one sub-agent run's derived stats: enough to place it on the
 // agent's timeline and compare it against its neighbours.
 type runStat struct {
 	startedAt time.Time
+	endedAt   time.Time
 	model     string // canonical model id, resolved via pricing.Canonical
 	usd       float64
 	turns     int
@@ -101,6 +105,7 @@ func Changes(st *store.Store, pr *pricing.Table, f store.Filter, minRuns int) ([
 
 		byAgent[r.AgentType] = append(byAgent[r.AgentType], runStat{
 			startedAt: r.StartedAt,
+			endedAt:   r.EndedAt,
 			model:     canonical,
 			usd:       usd,
 			turns:     r.Turns,
@@ -130,6 +135,13 @@ func Changes(st *store.Store, pr *pricing.Table, f store.Filter, minRuns int) ([
 			if len(before) == 0 || len(after) == 0 {
 				continue
 			}
+			// Two models running side by side are not a change from one to the
+			// other. Dispatching a wave of sub-agents with mixed models puts
+			// runs of both on the timeline at once, and ordering them by start
+			// time alone makes that look like a switch that never happened.
+			if overlaps(before, after) {
+				continue
+			}
 			beforeSide, afterSide := sideOf(before), sideOf(after)
 			changes = append(changes, Change{
 				Agent:   agent,
@@ -139,6 +151,7 @@ func Changes(st *store.Store, pr *pricing.Table, f store.Filter, minRuns int) ([
 				Before:  beforeSide,
 				After:   afterSide,
 				Verdict: verdictOf(beforeSide, afterSide, minRuns),
+				MinRuns: minRuns,
 			})
 		}
 	}
@@ -157,6 +170,31 @@ func Changes(st *store.Store, pr *pricing.Table, f store.Filter, minRuns int) ([
 		changes = changes[:20]
 	}
 	return changes, nil
+}
+
+// overlaps reports whether any run in the earlier segment was still going when
+// the later segment began. A run with no recorded end is treated as ending
+// when it started, which is the reading that assumes least.
+func overlaps(before, after []runStat) bool {
+	if len(before) == 0 || len(after) == 0 {
+		return false
+	}
+	start := after[0].startedAt
+	for _, r := range after {
+		if r.startedAt.Before(start) {
+			start = r.startedAt
+		}
+	}
+	for _, r := range before {
+		end := r.endedAt
+		if end.IsZero() || end.Before(r.startedAt) {
+			end = r.startedAt
+		}
+		if end.After(start) {
+			return true
+		}
+	}
+	return false
 }
 
 // sideOf rolls up one contiguous run of same-model runs into a Side.
