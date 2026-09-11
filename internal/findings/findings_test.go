@@ -226,7 +226,7 @@ func TestReadOnlyAgentFires(t *testing.T) {
 	if !strings.Contains(f.Patch, "+model: sonnet") {
 		t.Errorf("Patch = %q, want it to add the sonnet line", f.Patch)
 	}
-	if !strings.Contains(f.WhatToChange, ".claude/agents/researcher.md") {
+	if !strings.Contains(f.WhatToChange, filepath.Join(".claude", "agents", "researcher.md")) {
 		t.Errorf("WhatToChange = %q, want the exact file named", f.WhatToChange)
 	}
 	if !strings.Contains(f.WhatToChange, "model: sonnet") {
@@ -868,7 +868,7 @@ func TestSameModelUsesCanonicalIDs(t *testing.T) {
 }
 
 func TestAgentFileKnowsBuiltins(t *testing.T) {
-	if got := agentFile("researcher"); got != ".claude/agents/researcher.md" {
+	if got := agentFile("researcher"); got != filepath.Join(".claude", "agents", "researcher.md") {
 		t.Errorf("agentFile(researcher) = %q", got)
 	}
 	for _, builtin := range []string{"Explore", "Plan", "general-purpose", "claude", "unnamed", ""} {

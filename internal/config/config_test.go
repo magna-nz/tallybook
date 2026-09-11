@@ -27,7 +27,7 @@ func TestLoadFileAndEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("TALLYBOOK_DB", "~/x.db")
-	t.Setenv("TALLYBOOK_CLAUDE_ROOTS", "/a:/b")
+	t.Setenv("TALLYBOOK_CLAUDE_ROOTS", "/a"+string(os.PathListSeparator)+"/b")
 	cfg, err := LoadFrom(p)
 	if err != nil {
 		t.Fatal(err)

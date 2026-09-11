@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,18 @@ import (
 
 	"github.com/magna-nz/tallybook/internal/transcript/claude"
 )
+
+// hookJSON builds a hook payload the way Claude Code does. Hand-written JSON
+// cannot carry a Windows path: a backslash starts an escape sequence there, so
+// "C:\Users\..." is not valid JSON and the payload silently parses as empty.
+func hookJSON(t *testing.T, fields map[string]string) string {
+	t.Helper()
+	b, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
 
 // runHook is like the run helper in e2e_test.go but lets the caller supply
 // stdin, which "hook session-end" reads.
@@ -197,8 +210,12 @@ func TestHookSessionEndIsFastAndLogsToAFile(t *testing.T) {
 	fixture := filepath.Join(repoRoot(t), "internal", "transcript", "claude",
 		"testdata", "projects", "-home-user-project", "sess-0001.jsonl")
 
-	input := `{"session_id":"sess-0001","transcript_path":"` + fixture +
-		`","hook_event_name":"SessionEnd","reason":"prompt_input_exit"}`
+	input := hookJSON(t, map[string]string{
+		"session_id":      "sess-0001",
+		"transcript_path": fixture,
+		"hook_event_name": "SessionEnd",
+		"reason":          "prompt_input_exit",
+	})
 
 	start := time.Now()
 	out, err := runHook(t, input, "hook", "session-end")
@@ -240,7 +257,7 @@ func TestHookSessionEndIngestsOnlyTheNamedTranscript(t *testing.T) {
 	fixture := filepath.Join(repoRoot(t), "internal", "transcript", "claude",
 		"testdata", "projects", "-home-user-project", "sess-0001.jsonl")
 
-	input := `{"transcript_path":"` + fixture + `","hook_event_name":"SessionEnd"}`
+	input := hookJSON(t, map[string]string{"transcript_path": fixture, "hook_event_name": "SessionEnd"})
 	if _, err := runHook(t, input, "hook", "session-end"); err != nil {
 		t.Fatal(err)
 	}

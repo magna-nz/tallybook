@@ -3,6 +3,7 @@ package findings
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -85,7 +86,8 @@ func agentFile(subagentType string) string {
 	if t == "" || t == "unnamed" || builtinAgents[t] {
 		return ""
 	}
-	return ".claude/agents/" + t + ".md"
+	// A path the reader is meant to open, so it uses their own separator.
+	return filepath.Join(".claude", "agents", t+".md")
 }
 
 // shortNames maps an exact model id to the name a user would type in an
