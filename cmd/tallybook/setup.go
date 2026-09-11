@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/magna-nz/tallybook/internal/config"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,22 +11,31 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// stopHookCommand is the command tallybook's Stop hook entry runs.
-const stopHookCommand = "tallybook hook stop"
+// sessionEndHookCommand is the command tallybook's SessionEnd hook entry runs.
+const sessionEndHookCommand = "tallybook hook session-end"
 
 // hookBlock is the exact JSON block `setup hook` tells the user to add to
 // ~/.claude/settings.json, verified against Claude Code's hooks reference
-// (docs.claude.com/en/docs/claude-code/hooks): "Stop" hooks take no
+// (code.claude.com/docs/en/hooks, checked 2026-09-11): "SessionEnd" hooks take no
 // matcher, so each entry in the array is just a { "hooks": [...] } group.
 const hookBlock = `{
   "hooks": {
-    "Stop": [
-      { "hooks": [ { "type": "command", "command": "tallybook hook stop" } ] }
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "tallybook hook session-end" } ] }
     ]
   }
 }`
 
-const hookRemovalNote = "Remove it later by deleting that entry from the \"Stop\" list in settings.json."
+const hookRemovalNote = "Remove it later by deleting that entry from the \"SessionEnd\" list in settings.json."
+
+// hookPurpose says what the hook is for. Claude Code does not show a hook's
+// output to the person at the keyboard, so it is worth being explicit that the
+// summary goes to a file rather than the terminal.
+func hookPurpose() string {
+	return "What it does: records each session the moment it ends, so `tallybook` is instant when you\n" +
+		"next run it, and appends one line per session to " + filepath.Join(config.Dir(), sessionLogName) + ".\n" +
+		"Claude Code does not show a hook's output, so that file is where the line goes."
+}
 
 func newSetupCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -40,7 +50,7 @@ func newSetupHookCmd() *cobra.Command {
 	var write bool
 	cmd := &cobra.Command{
 		Use:   "hook",
-		Short: "Print (or add) the Claude Code Stop hook that runs tallybook after every session",
+		Short: "Print (or add) the Claude Code hook that records each session as it ends",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSetupHook(cmd, write)
@@ -72,6 +82,8 @@ func runSetupHook(cmd *cobra.Command, write bool) error {
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "Add that to", path)
 		fmt.Fprintln(out, hookRemovalNote)
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, hookPurpose())
 		return nil
 	}
 
@@ -80,17 +92,17 @@ func runSetupHook(cmd *cobra.Command, write bool) error {
 		return err
 	}
 
-	already, err := doc.hasTallybookStopHook()
+	already, err := doc.hasTallybookHook()
 	if err != nil {
 		return err
 	}
 	if already {
-		fmt.Fprintln(out, "A Stop hook running tallybook is already present in", path)
+		fmt.Fprintln(out, "A SessionEnd hook running tallybook is already present in", path)
 		fmt.Fprintln(out, "Not writing.")
 		return nil
 	}
 
-	if err := doc.addStopHook(); err != nil {
+	if err := doc.addHook(); err != nil {
 		return err
 	}
 
@@ -98,18 +110,18 @@ func runSetupHook(cmd *cobra.Command, write bool) error {
 		return err
 	}
 
-	fmt.Fprintln(out, "Added a Stop hook to", path)
+	fmt.Fprintln(out, "Added a SessionEnd hook to", path)
 	fmt.Fprintln(out, hookRemovalNote)
 	return nil
 }
 
 // settingsDoc holds a Claude Code settings.json file loaded at just enough
-// resolution to touch "hooks"."Stop" and leave everything else byte-for-byte
+// resolution to touch "hooks"."SessionEnd" and leave everything else byte-for-byte
 // as encoding/json can preserve it.
 type settingsDoc struct {
-	top   map[string]json.RawMessage
-	hooks map[string]json.RawMessage
-	stop  []json.RawMessage
+	top        map[string]json.RawMessage
+	hooks      map[string]json.RawMessage
+	sessionEnd []json.RawMessage
 }
 
 // readSettings loads path, or starts an empty document if it does not
@@ -139,14 +151,14 @@ func readSettings(path string) (*settingsDoc, error) {
 		}
 	}
 
-	var stop []json.RawMessage
-	if rawStop, ok := hooks["Stop"]; ok {
-		if err := json.Unmarshal(rawStop, &stop); err != nil {
-			return nil, fmt.Errorf(`%s: "hooks"."Stop" is not a JSON array: %w`, path, err)
+	var sessionEnd []json.RawMessage
+	if rawSessionEnd, ok := hooks["SessionEnd"]; ok {
+		if err := json.Unmarshal(rawSessionEnd, &sessionEnd); err != nil {
+			return nil, fmt.Errorf(`%s: "hooks"."SessionEnd" is not a JSON array: %w`, path, err)
 		}
 	}
 
-	return &settingsDoc{top: top, hooks: hooks, stop: stop}, nil
+	return &settingsDoc{top: top, hooks: hooks, sessionEnd: sessionEnd}, nil
 }
 
 // hookHandler is the fields of a command hook handler this command cares
@@ -158,15 +170,15 @@ type hookHandler struct {
 	Command string `json:"command"`
 }
 
-// hookGroup is one entry of a "Stop" array: { "matcher"?, "hooks": [...] }.
+// hookGroup is one entry of a "SessionEnd" array: { "matcher"?, "hooks": [...] }.
 type hookGroup struct {
 	Hooks []json.RawMessage `json:"hooks"`
 }
 
-// hasTallybookStopHook reports whether any existing "Stop" entry already
+// hasTallybookHook reports whether any existing "SessionEnd" entry already
 // runs tallybook.
-func (d *settingsDoc) hasTallybookStopHook() (bool, error) {
-	for _, rawGroup := range d.stop {
+func (d *settingsDoc) hasTallybookHook() (bool, error) {
+	for _, rawGroup := range d.sessionEnd {
 		var group hookGroup
 		if err := json.Unmarshal(rawGroup, &group); err != nil {
 			continue // not a shape we understand; not a match either
@@ -184,9 +196,9 @@ func (d *settingsDoc) hasTallybookStopHook() (bool, error) {
 	return false, nil
 }
 
-// addStopHook appends the tallybook Stop hook group to the document.
-func (d *settingsDoc) addStopHook() error {
-	handler, err := json.Marshal(hookHandler{Type: "command", Command: stopHookCommand})
+// addHook appends the tallybook SessionEnd hook group to the document.
+func (d *settingsDoc) addHook() error {
+	handler, err := json.Marshal(hookHandler{Type: "command", Command: sessionEndHookCommand})
 	if err != nil {
 		return err
 	}
@@ -194,13 +206,13 @@ func (d *settingsDoc) addStopHook() error {
 	if err != nil {
 		return err
 	}
-	d.stop = append(d.stop, group)
+	d.sessionEnd = append(d.sessionEnd, group)
 
-	rawStop, err := json.Marshal(d.stop)
+	rawSessionEnd, err := json.Marshal(d.sessionEnd)
 	if err != nil {
 		return err
 	}
-	d.hooks["Stop"] = rawStop
+	d.hooks["SessionEnd"] = rawSessionEnd
 
 	rawHooks, err := json.Marshal(d.hooks)
 	if err != nil {

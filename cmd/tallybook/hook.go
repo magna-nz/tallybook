@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/magna-nz/tallybook/internal/config"
@@ -13,19 +15,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// hookStdinDeadline is how long "hook stop" waits for JSON on stdin before
-// carrying on as if nothing arrived. A human running the command by hand
-// gives it no stdin at all, and this command must never hang on that.
+// hookStdinDeadline is how long the hook waits for JSON on stdin before
+// carrying on as if nothing arrived. A person running the command by hand
+// gives it no stdin at all, and this must never hang on that.
+//
+// Claude Code gives a SessionEnd hook 1.5 seconds by default, so everything
+// here has to finish well inside that.
 const hookStdinDeadline = 200 * time.Millisecond
 
-// hookInput is the JSON a Claude Code Stop hook writes to this command's
-// stdin. Unknown fields are ignored; a malformed or empty payload yields the
-// zero value rather than an error.
+// hookInput is the JSON Claude Code writes to a hook's stdin. Unknown fields
+// are ignored; a malformed or empty payload yields the zero value rather than
+// an error.
 type hookInput struct {
 	SessionID      string `json:"session_id"`
 	TranscriptPath string `json:"transcript_path"`
 	CWD            string `json:"cwd"`
 	HookEventName  string `json:"hook_event_name"`
+	// Reason is why the session ended: clear, resume, logout,
+	// prompt_input_exit or other.
+	Reason string `json:"reason"`
 }
 
 // newHookCmd groups the hooks tallybook can be wired into a coding agent's
@@ -35,30 +43,42 @@ func newHookCmd(flags *globalFlags) *cobra.Command {
 		Use:   "hook",
 		Short: "Hooks a coding agent CLI can call directly",
 	}
-	cmd.AddCommand(newHookStopCmd(flags))
+	cmd.AddCommand(newHookSessionEndCmd(flags))
 	return cmd
 }
 
-// newHookStopCmd is meant to run from a Claude Code Stop hook: a one-line
-// summary of the session that just ended, on stdout. It must never fail a
-// user's session, so it never returns a non-zero exit code (short of Cobra
-// rejecting a flag before RunE even runs) and never panics or hangs.
-func newHookStopCmd(flags *globalFlags) *cobra.Command {
+// newHookSessionEndCmd runs from a Claude Code SessionEnd hook.
+//
+// SessionEnd, not Stop: Stop fires every time the agent finishes a reply, so
+// it would run dozens of times a session, and a Stop hook's stdout goes to the
+// debug log rather than to the person at the keyboard. SessionEnd fires once,
+// when the session actually ends.
+//
+// Because no hook's stdout reaches the user, this does not try to announce
+// anything. It records the session in the ledger while the transcript is
+// fresh, so `tallybook` is instant when it is next run, and appends one line
+// to a log the user can read whenever they like. Run by hand, it also prints
+// that line.
+//
+// It must never fail a user's session: no non-zero exit, no panic, no hang.
+//
+// Event choice and timeout verified 2026-09-11 against code.claude.com/docs/en/hooks.
+func newHookSessionEndCmd(flags *globalFlags) *cobra.Command {
 	return &cobra.Command{
-		Use:   "stop",
-		Short: "Print a one-line cost summary for the session that just ended",
+		Use:   "session-end",
+		Short: "Record the session that just ended (for a Claude Code SessionEnd hook)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			runHookStop(cmd, flags)
+			runHookSessionEnd(cmd, flags)
 			return nil
 		},
 	}
 }
 
-// runHookStop does the real work of "hook stop". Every failure path returns
-// silently rather than propagating an error: a hook that makes noise or
-// fails a session is worse than one that prints nothing.
-func runHookStop(cmd *cobra.Command, flags *globalFlags) {
+// runHookSessionEnd does the real work. Every failure path returns silently
+// rather than propagating an error: a hook that makes noise or fails a session
+// is worse than one that does nothing.
+func runHookSessionEnd(cmd *cobra.Command, flags *globalFlags) {
 	defer func() {
 		// Belt and braces: a hook must never take down the caller's
 		// session, however this command misbehaves.
@@ -67,11 +87,22 @@ func runHookStop(cmd *cobra.Command, flags *globalFlags) {
 
 	in := readHookInput(cmd.InOrStdin())
 
-	ctx, err := openApp(flags)
+	// A full scan would blow the 1.5 second budget on a large history. The
+	// hook names the one transcript that changed, so only that is read.
+	scoped := *flags
+	if in.TranscriptPath != "" {
+		scoped.noIngest = true
+	}
+
+	ctx, err := openApp(&scoped)
 	if err != nil {
 		return
 	}
 	defer ctx.close()
+
+	if in.TranscriptPath != "" {
+		ingestOne(ctx, in.TranscriptPath)
+	}
 
 	sessionID, ok := resolveHookSession(ctx, in)
 	if !ok {
@@ -86,7 +117,38 @@ func runHookStop(cmd *cobra.Command, flags *globalFlags) {
 	if !ok {
 		return
 	}
+	appendSessionLog(line)
 	fmt.Fprintln(cmd.OutOrStdout(), line)
+}
+
+// ingestOne reads a single transcript into the store. Used by the hook so a
+// session is recorded the moment it ends without rescanning everything.
+func ingestOne(ctx *appContext, path string) {
+	t, err := claude.Parse(path)
+	if err != nil {
+		return
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	_ = ctx.st.ReplaceTranscript(t, fi.Size(), fi.ModTime())
+}
+
+// sessionLogName is the file the hook appends to. No hook's stdout reaches
+// the person at the keyboard, so this is where the line actually goes.
+const sessionLogName = "sessions.log"
+
+// appendSessionLog adds one dated line to the log, and says nothing if it
+// cannot: a log that fails to write must not disturb the session that ended.
+func appendSessionLog(line string) {
+	f, err := os.OpenFile(filepath.Join(config.Dir(), sessionLogName),
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s  %s\n", time.Now().Format(time.RFC3339), line)
 }
 
 // readHookInput reads and parses whatever JSON is waiting on r, giving up

@@ -45,7 +45,7 @@ func TestSetupHookWithoutWriteCreatesNothing(t *testing.T) {
 	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
 		t.Fatalf("setup hook without --write created %s (stat err: %v)", settingsPath, err)
 	}
-	if !strings.Contains(out, `"tallybook hook stop"`) {
+	if !strings.Contains(out, `"tallybook hook session-end"`) {
 		t.Errorf("setup hook output missing the hook command: %q", out)
 	}
 	if !strings.Contains(out, settingsPath) {
@@ -103,7 +103,7 @@ func TestSetupHookWriteAddsHookAndPreservesExistingKeys(t *testing.T) {
 					Type    string `json:"type"`
 					Command string `json:"command"`
 				} `json:"hooks"`
-			} `json:"Stop"`
+			} `json:"SessionEnd"`
 		} `json:"hooks"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
@@ -126,13 +126,13 @@ func TestSetupHookWriteAddsHookAndPreservesExistingKeys(t *testing.T) {
 	found := false
 	for _, group := range doc.Hooks.Stop {
 		for _, h := range group.Hooks {
-			if h.Type == "command" && h.Command == "tallybook hook stop" {
+			if h.Type == "command" && h.Command == "tallybook hook session-end" {
 				found = true
 			}
 		}
 	}
 	if !found {
-		t.Errorf("Stop hooks do not include tallybook: %+v", doc.Hooks.Stop)
+		t.Errorf("SessionEnd hooks do not include tallybook: %+v", doc.Hooks.Stop)
 	}
 
 	if !strings.Contains(out, settingsPath) {
@@ -162,7 +162,7 @@ func TestSetupHookWriteTwiceDoesNotDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read settings.json: %v", err)
 	}
-	if n := strings.Count(string(data), "tallybook hook stop"); n != 1 {
+	if n := strings.Count(string(data), "tallybook hook session-end"); n != 1 {
 		t.Errorf("settings.json contains the hook command %d times, want 1:\n%s", n, data)
 	}
 }
@@ -173,7 +173,7 @@ func TestSetupHookWriteWithInvalidJSONFailsAndLeavesFileUntouched(t *testing.T) 
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	const broken = `{ "hooks": { "Stop": [ oops`
+	const broken = `{ "hooks": { "SessionEnd": [ oops`
 	if err := os.WriteFile(settingsPath, []byte(broken), 0o644); err != nil {
 		t.Fatal(err)
 	}
