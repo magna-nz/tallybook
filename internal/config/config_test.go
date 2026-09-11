@@ -96,6 +96,7 @@ func TestExpandHomeKeepsBackslashesInAUnixPath(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	t.Setenv("TALLYBOOK_PLAN", "")
 	t.Setenv("TALLYBOOK_DB", `~/odd\name.db`)
 

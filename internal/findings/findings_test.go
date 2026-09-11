@@ -78,7 +78,9 @@ func input(t *testing.T, st *store.Store) Input {
 // file with no model line.
 func agents(t *testing.T, specs ...string) agentfile.Set {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir()) // keep the real ~/.claude/agents out of the test
+	fakeHome := t.TempDir() // keep the real ~/.claude/agents out of the test
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("USERPROFILE", fakeHome) // os.UserHomeDir reads this on Windows
 	root := t.TempDir()
 	dir := filepath.Join(root, ".claude", "agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -1123,6 +1125,7 @@ func TestReadOnlyFloorStillExcludesThinEvidence(t *testing.T) {
 func TestAdviceShortensHomePaths(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 
 	inside := filepath.Join(home, ".claude", "agents", "researcher.md")
 	if got := displayPath(inside); got != filepath.Join("~", ".claude", "agents", "researcher.md") {
@@ -1142,6 +1145,7 @@ func TestReadOnlyAdviceUsesTheShortenedPath(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	dir := filepath.Join(home, ".claude", "agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
