@@ -516,3 +516,149 @@ func TestE2EFindingsCommand(t *testing.T) {
 
 	t.Log("\n" + strings.TrimRight(out, "\n"))
 }
+
+// The fixtures run from 1 to 2 September 2026. A window starting on the 2nd
+// therefore has the 1st in the window before it, however far today drifts
+// from the fixtures: the prior window is the same length and ends where this
+// one starts, so it only ever grows backwards.
+const compareSince = "2026-09-02"
+
+func TestE2ECompareShowsThePriorWindow(t *testing.T) {
+	e2eEnv(t)
+
+	out, err := run(t, "--since", compareSince, "report", "--compare")
+	if err != nil {
+		t.Fatalf("report --compare: %v\noutput:\n%s", err, out)
+	}
+	for _, want := range []string{
+		"Compared with the", "before (", // the heading names the prior window
+		"Total", "before, ", " now", // and every line gives both figures
+		"Cache hit rate",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("compare output missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "nothing to compare with") {
+		t.Errorf("the prior window holds the 1 September fixtures, so it is not empty:\n%s", out)
+	}
+	// The block sits between the totals and the findings, and stays narrow.
+	if strings.Index(out, "Compared with") < strings.Index(out, "Total") {
+		t.Errorf("comparison should follow the totals table:\n%s", out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if len(line) > 100 {
+			t.Errorf("compare line exceeds 100 columns (%d): %q", len(line), line)
+		}
+	}
+}
+
+func TestE2ECompareWorksOnTheBareCommand(t *testing.T) {
+	e2eEnv(t)
+
+	out, err := run(t, "--since", compareSince, "--compare")
+	if err != nil {
+		t.Fatalf("tallybook --compare: %v\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(out, "Compared with the") {
+		t.Errorf("bare command with --compare printed no comparison:\n%s", out)
+	}
+}
+
+func TestE2ECompareJSON(t *testing.T) {
+	e2eEnv(t)
+
+	out, err := run(t, "--since", compareSince, "--json", "report", "--compare")
+	if err != nil {
+		t.Fatalf("report --compare --json: %v\noutput:\n%s", err, out)
+	}
+	var doc struct {
+		USD          float64 `json:"usd"`
+		CacheHitRate float64 `json:"cacheHitRate"`
+		Compare      *struct {
+			USD          float64 `json:"usd"`
+			Sessions     int     `json:"sessions"`
+			CacheHitRate float64 `json:"cacheHitRate"`
+			Window       struct {
+				Since string  `json:"since"`
+				Until string  `json:"until"`
+				Days  float64 `json:"days"`
+			} `json:"window"`
+		} `json:"compare"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("parse: %v\n%s", err, out)
+	}
+	if doc.CacheHitRate < 0 || doc.CacheHitRate > 1 {
+		t.Errorf("cacheHitRate = %v, want 0..1", doc.CacheHitRate)
+	}
+	if doc.Compare == nil {
+		t.Fatalf("compare object missing:\n%s", out)
+	}
+	if doc.Compare.Sessions == 0 || doc.Compare.USD <= 0 {
+		t.Errorf("prior window should hold the 1 September fixtures with a cost: %+v", doc.Compare)
+	}
+	if doc.Compare.Window.Until != compareSince {
+		t.Errorf("prior window should end where this one starts: until = %q, want %q", doc.Compare.Window.Until, compareSince)
+	}
+	if doc.Compare.Window.Days <= 0 {
+		t.Errorf("prior window has no length: %+v", doc.Compare.Window)
+	}
+	if doc.Compare.CacheHitRate < 0 || doc.Compare.CacheHitRate > 1 {
+		t.Errorf("compare.cacheHitRate = %v, want 0..1", doc.Compare.CacheHitRate)
+	}
+}
+
+func TestE2ECompareRefusesAllTime(t *testing.T) {
+	e2eEnv(t)
+
+	_, err := run(t, "--since", "all", "report", "--compare")
+	if err == nil {
+		t.Fatal("--since all --compare succeeded; there is no window before all time")
+	}
+	var ue usageError
+	if !errorsAsUsageError(err, &ue) {
+		t.Errorf("--since all --compare did not produce a usageError: %v (%T)", err, err)
+	}
+	if !strings.Contains(err.Error(), "--compare") {
+		t.Errorf("error should name the flag: %v", err)
+	}
+}
+
+func TestE2EReportWithoutCompareHasNoComparison(t *testing.T) {
+	e2eEnv(t)
+
+	out, err := run(t, "--since", compareSince, "report")
+	if err != nil {
+		t.Fatalf("report: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "Compared with") || strings.Contains(out, "nothing to compare") {
+		t.Errorf("no comparison was asked for:\n%s", out)
+	}
+	if !strings.Contains(out, "Cache hit rate") {
+		t.Errorf("the cache hit rate line is always shown:\n%s", out)
+	}
+	jsonOut, err := run(t, "--since", compareSince, "--json", "report")
+	if err != nil {
+		t.Fatalf("report --json: %v\n%s", err, jsonOut)
+	}
+	if strings.Contains(jsonOut, `"compare"`) {
+		t.Errorf("compare should be omitted from JSON when not asked for:\n%s", jsonOut)
+	}
+	if !strings.Contains(jsonOut, `"cacheHitRate"`) {
+		t.Errorf("cacheHitRate should always be in JSON:\n%s", jsonOut)
+	}
+}
+
+func TestE2ECompareOnAnEmptyPriorWindow(t *testing.T) {
+	e2eEnv(t)
+
+	// A window starting on the 1st has nothing before it in the fixtures.
+	out, err := run(t, "--since", "2026-09-01", "report", "--compare")
+	if err != nil {
+		t.Fatalf("report --compare: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "nothing to compare with") {
+		t.Errorf("an empty prior window should say so:\n%s", out)
+	}
+}

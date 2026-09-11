@@ -35,6 +35,7 @@ type globalFlags struct {
 	db       string
 	claude   bool // scope to Claude Code sessions
 	codex    bool // scope to Codex sessions
+	compare  bool // report only: show the window before this one alongside
 }
 
 // source turns the --claude/--codex pair into a filter value. Both or

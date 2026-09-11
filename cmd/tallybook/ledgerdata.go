@@ -6,6 +6,7 @@ import (
 	"github.com/magna-nz/tallybook/internal/agentfile"
 	"github.com/magna-nz/tallybook/internal/findings"
 	"github.com/magna-nz/tallybook/internal/ledger"
+	"github.com/magna-nz/tallybook/internal/report"
 	"github.com/magna-nz/tallybook/internal/store"
 )
 
@@ -86,4 +87,31 @@ func projectRoots(ctx *appContext) []string {
 		roots = append(roots, r.Project)
 	}
 	return roots
+}
+
+// priorComparison builds the window-on-window block for --compare: the same
+// filter, shifted back one window length. ok is false when the window has
+// nothing before it, which is what --since all means.
+func priorComparison(ctx *appContext) (*report.Comparison, bool, error) {
+	prior, ok := ledger.Prior(ctx.window)
+	if !ok {
+		return nil, false, nil
+	}
+	filter := ctx.filter
+	filter.Since, filter.Until = prior.Since, prior.Until
+	sessions, err := ledger.Sessions(ctx.st, ctx.prices, filter)
+	if err != nil {
+		return nil, true, err
+	}
+	totals, err := ledger.Total(sessions, ctx.st, ctx.prices)
+	if err != nil {
+		return nil, true, err
+	}
+	mainCount, subCount := countMainAndSub(sessions)
+	return &report.Comparison{
+		Window:    prior,
+		Totals:    totals,
+		Sessions:  mainCount,
+		Subagents: subCount,
+	}, true, nil
 }

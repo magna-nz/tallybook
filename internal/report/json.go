@@ -45,10 +45,32 @@ type reportJSONDoc struct {
 	MainUSD     float64               `json:"mainUSD"`
 	SubagentUSD float64               `json:"subagentUSD"`
 	BySource    map[string]sourceJSON `json:"bySource"`
+	// CacheHitRate is the share of input-side tokens read back from the
+	// prompt cache, 0..1.
+	CacheHitRate float64 `json:"cacheHitRate"`
+	// Compare is the window before this one, present only with --compare.
+	Compare *compareJSON `json:"compare,omitempty"`
 
 	Findings []reportFindingJSON `json:"findings"`
 
 	SkippedFiles int `json:"skippedFiles"`
+}
+
+// compareJSON is the prior window's figures, in the same units as the
+// top-level ones so a client can diff them without a second schema.
+type compareJSON struct {
+	Window struct {
+		Since string  `json:"since"`
+		Until string  `json:"until"`
+		Days  float64 `json:"days"`
+		Label string  `json:"label"`
+	} `json:"window"`
+	Sessions     int     `json:"sessions"`
+	Subagents    int     `json:"subagents"`
+	USD          float64 `json:"usd"`
+	MainUSD      float64 `json:"mainUSD"`
+	SubagentUSD  float64 `json:"subagentUSD"`
+	CacheHitRate float64 `json:"cacheHitRate"`
 }
 
 // ReportJSON writes ReportData as JSON.
@@ -71,6 +93,19 @@ func ReportJSON(w io.Writer, d ReportData) error {
 		doc.BySource[string(src)] = sourceJSON{USD: st.USD, Sessions: st.Sessions, Turns: st.Turns}
 	}
 	doc.SkippedFiles = d.SkippedFiles
+	doc.CacheHitRate = d.Totals.CacheHitRate()
+	if c := d.Compare; c != nil {
+		cj := &compareJSON{
+			Sessions: c.Sessions, Subagents: c.Subagents,
+			USD: c.Totals.USD, MainUSD: c.Totals.MainUSD, SubagentUSD: c.Totals.SubagentUSD,
+			CacheHitRate: c.Totals.CacheHitRate(),
+		}
+		cj.Window.Since = c.Window.Since.Format("2006-01-02")
+		cj.Window.Until = c.Window.Until.Format("2006-01-02")
+		cj.Window.Days = c.Window.Days
+		cj.Window.Label = c.Window.Label
+		doc.Compare = cj
+	}
 
 	for _, f := range d.Findings {
 		doc.Findings = append(doc.Findings, reportFindingJSON{

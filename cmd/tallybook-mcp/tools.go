@@ -124,6 +124,7 @@ func registerTools(s *mcp.Server, a *app) {
 
 type ReportIn struct {
 	Scope
+	Compare bool `json:"compare,omitempty" jsonschema:"also return the window of the same length before this one, so the caller can say whether spend rose or fell; not allowed with since=all"`
 }
 
 type WindowOut struct {
@@ -148,10 +149,24 @@ type FindingSummary struct {
 	Direction  string  `json:"direction" jsonschema:"downgrade, upgrade, context, cache, effort, or config"`
 }
 
+// PriorOut is the window before the report's own, returned when compare is
+// set. Its figures are in the same units as the top-level ones.
+type PriorOut struct {
+	Window       WindowOut `json:"window"`
+	Sessions     int       `json:"sessions" jsonschema:"main sessions in the prior window"`
+	Subagents    int       `json:"subagents"`
+	USD          float64   `json:"usd"`
+	MainUSD      float64   `json:"main_usd"`
+	SubagentUSD  float64   `json:"subagent_usd"`
+	CacheHitRate float64   `json:"cache_hit_rate" jsonschema:"share of input-side tokens read back from the prompt cache, 0..1"`
+}
+
 type ReportOut struct {
 	Money
 	Freshness
 	Window        WindowOut            `json:"window"`
+	CacheHitRate  float64              `json:"cache_hit_rate" jsonschema:"share of everything sent to the model that was read back from the prompt cache rather than processed afresh, 0..1"`
+	Prior         *PriorOut            `json:"prior,omitempty" jsonschema:"the window before this one; present only when compare was set"`
 	Sessions      int                  `json:"sessions" jsonschema:"main sessions in the window"`
 	Subagents     int                  `json:"subagents" jsonschema:"sub-agent runs in the window"`
 	Turns         int                  `json:"turns"`
@@ -178,6 +193,13 @@ func (a *app) report(in ReportIn) (string, ReportOut, error) {
 	if err != nil {
 		return "", ReportOut{}, err
 	}
+	var prior *PriorOut
+	if in.Compare {
+		prior, err = a.priorWindow(sc)
+		if err != nil {
+			return "", ReportOut{}, err
+		}
+	}
 
 	out := ReportOut{
 		Money:     money(sc),
@@ -201,6 +223,8 @@ func (a *app) report(in ReportIn) (string, ReportOut, error) {
 		UnknownModels: totals.UnknownModels,
 		Findings:      []FindingSummary{},
 		SkippedFiles:  a.ingestResult(sc.filter.Source).Failed,
+		CacheHitRate:  totals.CacheHitRate(),
+		Prior:         prior,
 	}
 	if out.ByModel == nil {
 		out.ByModel = map[string]float64{}
@@ -224,6 +248,10 @@ func (a *app) report(in ReportIn) (string, ReportOut, error) {
 	}
 	fmt.Fprintf(&b, "Total %s across %d sessions and %d sub-agent runs (%d turns). Main %s, sub-agents %s.\n",
 		fmtUSD(totals.USD), totals.Sessions-totals.Subagents, totals.Subagents, totals.Turns, fmtUSD(totals.MainUSD), fmtUSD(totals.SubagentUSD))
+	fmt.Fprintf(&b, "Cache hit rate %.0f%%: that share of everything sent was read back from the prompt cache.\n", out.CacheHitRate*100)
+	if prior != nil {
+		fmt.Fprint(&b, priorSentence(out, prior))
+	}
 	for _, src := range sortedSources(totals.BySource) {
 		st := totals.BySource[src]
 		fmt.Fprintf(&b, "  %s: %s over %d sessions\n", report.SourceLabel(src), fmtUSD(st.USD), st.Sessions)
@@ -762,4 +790,50 @@ func (a *app) refresh(RefreshIn) (string, RefreshOut, error) {
 	text := fmt.Sprintf("Scanned %d transcript files in %dms: %d new or changed, %d unchanged, %d failed.\n",
 		r.Scanned, out.ElapsedMS, r.Ingested, r.Unchanged, r.Failed)
 	return text, out, nil
+}
+
+// priorWindow builds the compare block: the same filter shifted back one
+// window length. An all-time window has nothing before it, which is an error
+// for the caller to fix rather than a silent absence.
+func (a *app) priorWindow(sc scope) (*PriorOut, error) {
+	prior, ok := ledger.Prior(sc.window)
+	if !ok {
+		return nil, fmt.Errorf("compare needs a bounded window; since=all has nothing before it")
+	}
+	filter := sc.filter
+	filter.Since, filter.Until = prior.Since, prior.Until
+	sessions, err := ledger.Sessions(a.st, a.prices, filter)
+	if err != nil {
+		return nil, err
+	}
+	totals, err := ledger.Total(sessions, a.st, a.prices)
+	if err != nil {
+		return nil, err
+	}
+	return &PriorOut{
+		Window: WindowOut{
+			Since: timeString(prior.Since), Until: prior.Until.Format(time.RFC3339),
+			Days: prior.Days, Label: prior.Label,
+		},
+		Sessions:     totals.Sessions - totals.Subagents,
+		Subagents:    totals.Subagents,
+		USD:          totals.USD,
+		MainUSD:      totals.MainUSD,
+		SubagentUSD:  totals.SubagentUSD,
+		CacheHitRate: totals.CacheHitRate(),
+	}, nil
+}
+
+// priorSentence is the one line of prose a model reads about the prior
+// window. The structured value carries the figures; this carries the
+// direction, which is what the question was.
+func priorSentence(out ReportOut, prior *PriorOut) string {
+	if prior.Sessions == 0 && prior.Subagents == 0 {
+		return fmt.Sprintf("Nothing was recorded in the %.0f days before (%s), so there is nothing to compare with.\n",
+			prior.Window.Days, prior.Window.Label)
+	}
+	return fmt.Sprintf("Compared with the %.0f days before (%s): total %s, from %s to %s; sessions %d to %d; cache hit rate %.0f%% to %.0f%%.\n",
+		prior.Window.Days, prior.Window.Label, report.ChangePhrase(prior.USD, out.USD),
+		fmtUSD(prior.USD), fmtUSD(out.USD), prior.Sessions, out.Sessions,
+		prior.CacheHitRate*100, out.CacheHitRate*100)
 }

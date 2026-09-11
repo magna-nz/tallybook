@@ -39,6 +39,10 @@ type ReportData struct {
 	ReportLimit  int
 
 	SkippedFiles int // ingest.Result.Failed; 0 when not ingested or nothing failed
+
+	// Compare is the window before this one, when the caller asked for the
+	// comparison. Nil means the block is not printed.
+	Compare *Comparison
 }
 
 // Report writes the default report: a scan summary, the window totals
@@ -88,6 +92,14 @@ func Report(w io.Writer, d ReportData) error {
 			row("  "+SourceLabel(src), st.USD, sh)
 		}
 	}
+	// One line for whether caching is working: the share of everything sent
+	// that came back from the cache. It sits under the share column because
+	// it is a share, not money.
+	if d.Plan == config.PlanSubscription {
+		fmt.Fprintf(bw, "%-30s%8s\n", "  Cache hit rate", share(d.Totals.CacheHitRate()))
+	} else {
+		fmt.Fprintf(bw, "%-30s%18s%8s\n", "  Cache hit rate", "", share(d.Totals.CacheHitRate()))
+	}
 	if n := len(d.Totals.UnknownModels); n > 0 {
 		var ids []string
 		var turns int
@@ -99,6 +111,11 @@ func Report(w io.Writer, d ReportData) error {
 		fmt.Fprintf(bw, "  Not priced: %d turns on %s (no price on file; add one under [prices] in config.toml)\n", turns, strings.Join(ids, ", "))
 	}
 	fmt.Fprintln(bw)
+
+	if d.Compare != nil {
+		writeComparison(bw, d)
+		fmt.Fprintln(bw)
+	}
 
 	top := SelectTop(d.Findings, d.MinSavingUSD, d.ReportLimit)
 	if len(d.Findings) == 0 {

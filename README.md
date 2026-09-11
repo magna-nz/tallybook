@@ -22,16 +22,17 @@ $ tallybook
 Scanned 137 sessions, 96 sub-agent runs (Aug 20 – Sep 11)
 
 Last 30 days                     share list-price equiv.
-  Total                           100%         $1,289.13
-  Main session turns               86%         $1,113.08
+  Total                           100%         $1,296.73
+  Main session turns               86%         $1,120.68
   Sub-agents                       14%           $176.05
+  Cache hit rate                   99%
 
 Top findings (estimated saving / month)
 
  1.     20%   Long sessions pay to carry their own history
               27 sessions in the last 30 days grew past 100,000 tokens of conversation.
  2.      2%   Thinking was spent on turns that did no thinking
-              On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
+              On 2,947 turns in the last 30 days, the model spent thinking tokens and then did no…
  3.      1%   Your saved context was rebuilt mid-session
               In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
  4.      1%   An hour of cache lifetime went unused
@@ -83,6 +84,7 @@ command = "tallybook-mcp"
 ```sh
 tallybook                         # this period's report: the five biggest findings
 tallybook findings                # every finding, grouped by what kind of change it asks for
+tallybook --since 7d --compare    # this week against last week: spend, sessions, cache hit rate
 tallybook finding 1               # finding #1 in full: what happened, why, what to change
 tallybook finding 1 --evidence    # the same, with the sessions behind it
 tallybook finding 1 --patch       # finding #1's fix, as an applyable diff

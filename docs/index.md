@@ -37,16 +37,17 @@ $ tallybook
 Scanned 137 sessions, 96 sub-agent runs (Aug 20 – Sep 11)
 
 Last 30 days                     share list-price equiv.
-  Total                           100%         $1,289.13
-  Main session turns               86%         $1,113.08
+  Total                           100%         $1,296.73
+  Main session turns               86%         $1,120.68
   Sub-agents                       14%           $176.05
+  Cache hit rate                   99%
 
 Top findings (estimated saving / month)
 
  1.     20%   Long sessions pay to carry their own history
               27 sessions in the last 30 days grew past 100,000 tokens of conversation.
  2.      2%   Thinking was spent on turns that did no thinking
-              On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
+              On 2,947 turns in the last 30 days, the model spent thinking tokens and then did no…
  3.      1%   Your saved context was rebuilt mid-session
               In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
  4.      1%   An hour of cache lifetime went unused
@@ -244,6 +245,7 @@ claude-code-guide        2   claude-sonnet-5    high     $0.19        50%       
 | Report | `tallybook` |
 | Last week only | `tallybook --since 7d` |
 | One tool only | `tallybook --claude` or `tallybook --codex` |
+| This window against the one before | `tallybook --compare` |
 | Every finding, grouped by what to change | `tallybook findings` |
 | One finding, with evidence | `tallybook finding 1 --evidence` |
 | The change as a diff | `tallybook finding 1 --patch` |
@@ -283,6 +285,41 @@ implementer: Opus 5 to Sonnet 5, 4 Sep                                  keep
 
 This one is measured, not estimated. Both sides are real runs that really happened, so it is the
 strongest number the tool produces.
+
+### This window against the one before
+
+`--compare` asks the same question of the whole window. It prints the window of the same length
+that ended where this one started, and says which way each figure moved:
+
+```
+$ tallybook --since 7d --compare
+
+Scanned 9 sessions, 34 sub-agent runs (Sep 8 – Sep 11)
+
+Last 7 days                      share list-price equiv.
+  Total                           100%           $234.66
+  Main session turns               81%           $190.98
+  Sub-agents                       19%            $43.68
+  Cache hit rate                   98%
+
+Compared with the 7 days before (Aug 28 – Sep 4)
+  Total               down 36%        $367.47 before, $234.66 now
+  Main session turns  down 44%        $339.02 before, $190.98 now
+  Sub-agents          up 54%          $28.45 before, $43.68 now
+  Sessions            down 40%        15 before, 9 now
+  Sub-agent runs      up 278%         9 before, 34 now
+  Cache hit rate      about the same  99% before, 98% now
+```
+
+A move under one percent reads as "about the same", because a report that says "up 0.3%" invites a
+decision the number does not support. The cache hit rate moves in points rather than percent. Every
+figure here is measured. `--since all` has nothing before it, so `--compare` refuses it.
+
+The **cache hit rate** line in every report is the share of everything sent to the model that came
+back from the prompt cache rather than being processed afresh: cache reads over fresh input, cache
+reads and both kinds of cache write. It is the one number that says whether caching is doing its
+job. Claude Code usually sits in the high nineties; a fall means something is invalidating the
+cache, and the [cache findings](#keep-the-prompt-cache-warm) say what.
 
 ## What it finds
 
@@ -524,7 +561,7 @@ will call the tools itself.
 
 | Tool | Returns |
 |---|---|
-| `report` | The window's total, the split by tool and by model, and the findings with their ids |
+| `report` | The window's total, the split by tool and by model, the cache hit rate, and the findings with their ids; with `compare` set, the window before as well |
 | `finding` | One finding in full by id: the four sections, the evidence, the patch |
 | `changes` | Every sub-agent model change with before, after and a verdict |
 | `agents` | Spend per sub-agent type, with the model and effort level it mostly ran at |
@@ -534,7 +571,7 @@ will call the tools itself.
 | `refresh` | Rescan transcripts now |
 
 The window tools (`report`, `finding`, `changes`, `agents`, `sessions`) take `since`, `project`,
-`source` (`claude-code` or `codex`) and `currency`; `session` takes an `id` and `currency`;
+`source` (`claude-code` or `codex`) and `currency`; `report` also takes `compare`; `session` takes an `id` and `currency`;
 `prices` and `refresh` take nothing. Every tool returns both prose and a structured value with the
 time of the last scan. The server scans once at startup and again when a tool is called more than
 a minute after the last scan, re-reading the config and plan each time. On a subscription the

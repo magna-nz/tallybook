@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/magna-nz/tallybook/internal/ledger"
+	"github.com/magna-nz/tallybook/internal/report"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -615,5 +616,108 @@ func TestLazyRefresh(t *testing.T) {
 	}
 	if !strings.HasPrefix(resultText(res), "Warning:") {
 		t.Errorf("text does not open with the scan warning: %q", resultText(res))
+	}
+}
+
+// The fixtures run from 1 to 2 September 2026, so a window starting on the
+// 2nd has the 1st in the window before it however far today drifts.
+const compareSince = "2026-09-02"
+
+func TestReportCacheHitRateIsAlwaysReturned(t *testing.T) {
+	a := newTestApp(t)
+	cs := newTestSession(t, a)
+
+	res := callTool(t, cs, "report", map[string]any{"since": "all"})
+	if res.IsError {
+		t.Fatalf("report returned IsError: %s", resultText(res))
+	}
+	out := decode[ReportOut](t, res)
+	if out.CacheHitRate < 0 || out.CacheHitRate > 1 {
+		t.Errorf("cache_hit_rate = %v, want 0..1", out.CacheHitRate)
+	}
+	if out.Prior != nil {
+		t.Errorf("prior should be absent when compare was not set: %+v", out.Prior)
+	}
+	if text := resultText(res); !strings.Contains(text, "Cache hit rate") {
+		t.Errorf("text should name the cache hit rate:\n%s", text)
+	}
+	// The structured value and the ledger agree to the last decimal.
+	sc, err := a.newScope(Scope{Since: "all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, totals, err := a.sessionsAndTotals(sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.CacheHitRate != totals.CacheHitRate() {
+		t.Errorf("cache_hit_rate = %v, ledger says %v", out.CacheHitRate, totals.CacheHitRate())
+	}
+}
+
+func TestReportCompareReturnsThePriorWindow(t *testing.T) {
+	a := newTestApp(t)
+	cs := newTestSession(t, a)
+
+	res := callTool(t, cs, "report", map[string]any{"since": compareSince, "compare": true})
+	if res.IsError {
+		t.Fatalf("report compare returned IsError: %s", resultText(res))
+	}
+	out := decode[ReportOut](t, res)
+	if out.Prior == nil {
+		t.Fatal("prior missing with compare=true")
+	}
+	if out.Prior.Sessions == 0 || out.Prior.USD <= 0 {
+		t.Errorf("prior window should hold the 1 September fixtures with a cost: %+v", out.Prior)
+	}
+	if !strings.HasPrefix(out.Prior.Window.Until, compareSince) {
+		t.Errorf("prior should end where this window starts: until = %q", out.Prior.Window.Until)
+	}
+	if out.Prior.Window.Days <= 0 || out.Prior.Window.Label == "" {
+		t.Errorf("prior window is not described: %+v", out.Prior.Window)
+	}
+	if out.Prior.CacheHitRate < 0 || out.Prior.CacheHitRate > 1 {
+		t.Errorf("prior cache_hit_rate = %v, want 0..1", out.Prior.CacheHitRate)
+	}
+	text := resultText(res)
+	for _, want := range []string{"Compared with the", "days before (", "total ", "sessions ", "cache hit rate"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("compare text missing %q:\n%s", want, text)
+		}
+	}
+	// The direction word is the same one the CLI would print.
+	if !strings.Contains(text, report.ChangePhrase(out.Prior.USD, out.USD)) {
+		t.Errorf("compare text should carry the change phrase %q:\n%s", report.ChangePhrase(out.Prior.USD, out.USD), text)
+	}
+}
+
+func TestReportCompareRefusesAllTime(t *testing.T) {
+	a := newTestApp(t)
+	cs := newTestSession(t, a)
+
+	res := callTool(t, cs, "report", map[string]any{"since": "all", "compare": true})
+	if !res.IsError {
+		t.Fatalf("compare with since=all should be a tool error, got: %s", resultText(res))
+	}
+	if !strings.Contains(resultText(res), "compare") {
+		t.Errorf("error should name the input: %s", resultText(res))
+	}
+}
+
+func TestReportCompareOnAnEmptyPriorWindow(t *testing.T) {
+	a := newTestApp(t)
+	cs := newTestSession(t, a)
+
+	// Nothing in the fixtures precedes 1 September.
+	res := callTool(t, cs, "report", map[string]any{"since": "2026-09-01", "compare": true})
+	if res.IsError {
+		t.Fatalf("report compare returned IsError: %s", resultText(res))
+	}
+	out := decode[ReportOut](t, res)
+	if out.Prior == nil || out.Prior.Sessions != 0 || out.Prior.USD != 0 {
+		t.Errorf("empty prior window should still be returned, with zeros: %+v", out.Prior)
+	}
+	if !strings.Contains(resultText(res), "nothing to compare with") {
+		t.Errorf("text should say the prior window is empty:\n%s", resultText(res))
 	}
 }
