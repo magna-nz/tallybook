@@ -2,6 +2,7 @@ package findings
 
 import (
 	"fmt"
+	"github.com/magna-nz/tallybook/internal/model"
 	"sort"
 	"strings"
 
@@ -58,7 +59,7 @@ func (r readOnlyAgentRule) Run(in Input) (*Finding, error) {
 		if row.AgentID == "" {
 			continue // only sub-agent transcripts
 		}
-		if !allReadOnly(counts[row.ID]) {
+		if !model.AllReadOnly(counts[row.ID]) {
 			continue
 		}
 		turns, err := in.Store.Turns(row.ID)

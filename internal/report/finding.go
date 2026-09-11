@@ -69,6 +69,12 @@ func findingSaving(f findings.Finding, plan config.Plan) string {
 		return confidenceLabel(f)
 	}
 	if plan == config.PlanSubscription {
+		// Below half a percent, a share tells the reader nothing. The
+		// list-price equivalent at least gives them a size to judge.
+		if f.SavingShare*100 < 0.5 {
+			return fmt.Sprintf("frees %s of your usage, about %s a month at list price",
+				share(f.SavingShare), fmtUSD(f.SavingUSD))
+		}
 		return fmt.Sprintf("frees about %s of your usage", share(f.SavingShare))
 	}
 	return fmt.Sprintf("saves about %s/month", fmtUSD(f.SavingUSD))

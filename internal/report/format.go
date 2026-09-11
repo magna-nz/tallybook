@@ -43,7 +43,13 @@ func fmtUSD(amount float64) string {
 
 // share formats a fraction (0.34) as a percentage string ("34%").
 func share(fraction float64) string {
-	return fmt.Sprintf("%.0f%%", fraction*100)
+	pct := fraction * 100
+	// A real but tiny share must not render as a flat "0%", which reads as
+	// "nothing" rather than "not much".
+	if pct > 0 && pct < 0.5 {
+		return "<1%"
+	}
+	return fmt.Sprintf("%.0f%%", pct)
 }
 
 // moneyHeader returns the label for the money column: "list price" for a

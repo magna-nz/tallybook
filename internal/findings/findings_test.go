@@ -3,6 +3,7 @@ package findings
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -404,8 +405,11 @@ func TestCacheRebuildFires(t *testing.T) {
 	if !strings.Contains(f.WhatToChange, "~/.claude/settings.json") {
 		t.Errorf("WhatToChange = %q, want the exact file named", f.WhatToChange)
 	}
-	if !strings.Contains(f.WhatToChange, "Check the setting name") {
-		t.Errorf("WhatToChange = %q, want the caveat about the setting name", f.WhatToChange)
+	if !strings.Contains(f.WhatToChange, "promptCacheTtl") {
+		t.Errorf("WhatToChange = %q, want the real setting name", f.WhatToChange)
+	}
+	if strings.Contains(f.WhatToChange, "CLAUDE_CODE_CACHE_TTL") {
+		t.Error("WhatToChange names a setting that does not exist")
 	}
 	if got := len(f.Evidence.Rows); got != 1 {
 		t.Fatalf("evidence rows = %d, want 1", got)
@@ -734,19 +738,22 @@ func TestRunSetsFindingIDs(t *testing.T) {
 // --- text quality -------------------------------------------------------------
 
 // jargon is the vocabulary a report must not use without glossing it. The
-// check runs over prose only: an indented snippet is something to paste, and
-// a setting name is what it is (CLAUDE_CODE_CACHE_TTL contains one of these
-// words and cannot be renamed).
+// check runs over prose only. An indented snippet is something to paste, and
+// a quoted identifier is a name the user must type exactly, neither of which
+// can be reworded into plainer English.
 var jargon = []string{"TTL", "ctx", "MTok", "ephemeral"}
 
-// prose strips the indented snippet lines a finding tells the user to paste.
+var quotedIdentifier = regexp.MustCompile(`"[A-Za-z_][A-Za-z0-9_.]*"`)
+
+// prose strips what a reader is meant to copy rather than read: the indented
+// snippet lines, and any quoted setting name.
 func prose(s string) string {
 	var kept []string
 	for _, line := range strings.Split(s, "\n") {
 		if strings.HasPrefix(line, "    ") {
 			continue
 		}
-		kept = append(kept, line)
+		kept = append(kept, quotedIdentifier.ReplaceAllString(line, `""`))
 	}
 	return strings.Join(kept, "\n")
 }
@@ -832,18 +839,20 @@ func TestAgentFileKnowsBuiltins(t *testing.T) {
 	}
 }
 
-func TestReadOnlyToolClassification(t *testing.T) {
-	for _, name := range []string{"Read", "Grep", "Glob", "LS", "WebFetch", "mcp__notion__search_pages"} {
-		if !isReadOnlyTool(name) {
+func TestReadOnlyToolClassificationComesFromModel(t *testing.T) {
+	// The classification itself is tested in internal/model. What matters here
+	// is that the rules use that definition and not a second copy of it.
+	for _, name := range []string{"Read", "Grep", "Glob", "Bash(read)"} {
+		if !model.IsReadOnlyTool(name) {
 			t.Errorf("%s should be read-only", name)
 		}
 	}
-	for _, name := range []string{"Edit", "Write", "MultiEdit", "Bash", "apply_patch", "mcp__notion__create_page"} {
-		if isReadOnlyTool(name) {
+	for _, name := range []string{"Edit", "Write", "Bash", "Bash(write)"} {
+		if model.IsReadOnlyTool(name) {
 			t.Errorf("%s should not be read-only", name)
 		}
 	}
-	if !allReadOnly(map[string]int{}) {
+	if !model.AllReadOnly(map[string]int{}) {
 		t.Error("a run with no tool calls changed nothing")
 	}
 }

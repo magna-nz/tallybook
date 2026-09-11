@@ -61,80 +61,11 @@ func canonical(in Input, id string) string {
 	return strings.ToLower(strings.TrimSpace(id))
 }
 
-// readOnlyTools are the tools that only look at the project. A run that used
-// nothing else changed nothing, so it can move to a cheaper model without
-// risking a bad edit.
-var readOnlyTools = map[string]bool{
-	"read":         true,
-	"grep":         true,
-	"glob":         true,
-	"ls":           true,
-	"webfetch":     true,
-	"websearch":    true,
-	"notebookread": true,
-	"todoread":     true,
-	"toolsearch":   true,
-	"skill":        true,
-}
-
-// mutatingTools change the project or run arbitrary commands. Bare "bash"
-// (no class) and "bash(write)" are mutating; "bash(read)" is accepted above
-// because the parser classified every command in it as read-only without
-// keeping the command text.
-var mutatingTools = map[string]bool{
-	"edit":         true,
-	"write":        true,
-	"multiedit":    true,
-	"notebookedit": true,
-	"apply_patch":  true,
-	"exec_command": true,
-	"local_shell":  true,
-	"shell":        true,
-	"bash":         true,
-}
-
-// mcpReadVerbs mark an MCP tool as a reader rather than a writer.
-var mcpReadVerbs = []string{"read", "get", "list", "search", "find", "fetch"}
-
 // isReadOnlyTool reports whether a single tool call could not have changed
 // anything. Unknown tools are treated as mutating.
-func isReadOnlyTool(name string) bool {
-	n := strings.ToLower(strings.TrimSpace(name))
-	if n == "" {
-		return false
-	}
-	if strings.HasSuffix(n, "(read)") {
-		return true // a shell tool whose every command the parser classified as read-only
-	}
-	if mutatingTools[n] {
-		return false
-	}
-	if readOnlyTools[n] {
-		return true
-	}
-	if strings.HasPrefix(n, "mcp__") {
-		for _, verb := range mcpReadVerbs {
-			if strings.Contains(n, verb) {
-				return true
-			}
-		}
-	}
-	return false
-}
 
 // allReadOnly reports whether every tool a run used was read-only. A run that
 // called no tools at all counts as read-only: it changed nothing.
-func allReadOnly(counts map[string]int) bool {
-	for name, n := range counts {
-		if n <= 0 {
-			continue
-		}
-		if !isReadOnlyTool(name) {
-			return false
-		}
-	}
-	return true
-}
 
 // builtinAgents ship with the harness and have no file on disk to edit.
 var builtinAgents = map[string]bool{

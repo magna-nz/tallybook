@@ -3,7 +3,6 @@ package ledger
 import (
 	"github.com/magna-nz/tallybook/internal/model"
 	"sort"
-	"strings"
 
 	"github.com/magna-nz/tallybook/internal/pricing"
 	"github.com/magna-nz/tallybook/internal/store"
@@ -18,45 +17,6 @@ type AgentRow struct {
 	ReadOnlyPct float64
 	Errors      int
 	Mismatched  int // requested model differs from what the run actually used (pricing.SameModel)
-}
-
-// readOnlyTools are tool names that never change the project on their own.
-var readOnlyTools = map[string]bool{
-	"Read": true, "Grep": true, "Glob": true, "LS": true, "WebFetch": true,
-	"WebSearch": true, "NotebookRead": true, "ToolSearch": true, "Skill": true,
-}
-
-// mcpReadVerbs are substrings that mark an mcp__ tool as read-only.
-var mcpReadVerbs = []string{"read", "get", "list", "search", "find", "fetch"}
-
-// isReadOnly reports whether every tool used in a run is read-only. A run
-// with no tools at all is read-only. Shell tools count only when the parser
-// classified every command as read-only, which the store surfaces as a
-// "(read)" suffix on the tool name.
-func isReadOnly(counts map[string]int) bool {
-	for name := range counts {
-		if strings.HasSuffix(name, "(read)") {
-			continue
-		}
-		if readOnlyTools[name] {
-			continue
-		}
-		if strings.HasPrefix(name, "mcp__") && hasReadVerb(name) {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func hasReadVerb(name string) bool {
-	lower := strings.ToLower(name)
-	for _, v := range mcpReadVerbs {
-		if strings.Contains(lower, v) {
-			return true
-		}
-	}
-	return false
 }
 
 // agentAgg accumulates one agent type's rollup while walking sessions.
@@ -114,7 +74,7 @@ func Agents(st *store.Store, pr *pricing.Table, f store.Filter) ([]AgentRow, err
 		}
 		a.usdTotal += sessionUSD
 
-		if isReadOnly(toolCounts[r.ID]) {
+		if model.AllReadOnly(toolCounts[r.ID]) {
 			a.readOnly++
 		}
 

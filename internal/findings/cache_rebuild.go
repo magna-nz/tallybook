@@ -20,6 +20,10 @@ type rebuiltSession struct {
 	longestGap  time.Duration
 	shortestGap time.Duration
 	wasted      float64
+	// on1h is true when this session's cache writes were already taking the
+	// one-hour lifetime. The transcript records which was used, so the advice
+	// does not have to guess.
+	on1h bool
 }
 
 func (cacheRebuildRule) Run(in Input) (*Finding, error) {
@@ -61,6 +65,9 @@ func (cacheRebuildRule) Run(in Input) (*Finding, error) {
 			}
 
 			s.rebuilds++
+			if cur.Usage.CacheWrite1h > cur.Usage.CacheWrite5m {
+				s.on1h = true
+			}
 			if pause > s.longestGap {
 				s.longestGap = pause
 			}
@@ -124,16 +131,20 @@ func (cacheRebuildRule) Run(in Input) (*Finding, error) {
 			"is charged again at up to ten times the cache-read price. In these sessions it happened during %s.",
 		gapMinutes, pauses)
 
-	f.WhatToChange = "Claude Code can keep the cache for an hour instead of five minutes when you use the " +
-		"one-hour cache setting. Turn it on by adding this to ~/.claude/settings.json:\n\n" +
-		"    \"env\": { \"CLAUDE_CODE_CACHE_TTL\": \"1h\" }\n\n" +
-		"One-hour entries cost more to write, so this pays off when your pauses are between five minutes and an " +
-		"hour. Check the setting name against the current Claude Code docs before you rely on it; it has changed " +
-		"before, and a name the harness does not recognise is silently ignored. " +
-		"Codex users: there is no setting; shorter pauses are the only lever."
-
-	f.WhatToExpect = "Cache rebuilds should drop to once or twice per session. " +
-		"Sessions with long pauses will see the biggest difference."
+	already1h := 0
+	for _, h := range hits {
+		if h.on1h {
+			already1h++
+		}
+	}
+	f.WhatToChange = cacheWhatToChange(already1h, len(hits), longest)
+	if already1h == len(hits) {
+		f.WhatToExpect = "Nothing to change in settings. The pauses themselves are the only lever left, " +
+			"so this is worth knowing rather than acting on."
+	} else {
+		f.WhatToExpect = "Cache rebuilds should drop to once or twice per session. " +
+			"Sessions with long pauses will see the biggest difference."
+	}
 
 	f.Evidence = Table{Columns: []string{"session", "project", "rebuilds", "longest pause", "wasted"}}
 	for _, h := range hits {
@@ -146,4 +157,37 @@ func (cacheRebuildRule) Run(in Input) (*Finding, error) {
 		})
 	}
 	return f, nil
+}
+
+// cacheWhatToChange writes the advice, which depends on what the transcripts
+// already show. Claude Code records whether each cache write took the
+// five-minute or the one-hour lifetime, so a session already on the long one
+// needs different advice from a session on the short one.
+//
+// Setting names verified 2026-09-11 against code.claude.com/docs/en/settings-reference.
+func cacheWhatToChange(already1h, total int, longest time.Duration) string {
+	const codex = "\n\nCodex has no equivalent setting. There, shorter pauses are the only lever."
+
+	if already1h == total {
+		return fmt.Sprintf(
+			"Nothing to turn on: these sessions were already keeping the conversation for an hour, and the "+
+				"pauses ran past it anyway, up to %s minutes. An hour is as long as the memory gets, so the "+
+				"only thing that would help is coming back sooner, or starting a fresh session rather than "+
+				"resuming a long one after a break.", fmtMinutes(longest)) + codex
+	}
+
+	advice := "Claude Code can keep the conversation for an hour instead of five minutes. Add this to " +
+		"~/.claude/settings.json, as a top-level key rather than inside the \"env\" block:\n\n" +
+		"    \"promptCacheTtl\": \"1h\"\n\n" +
+		"For sub-agents, the same file takes \"subagentPromptCacheTtl\". Both need Claude Code 2.1.242 or " +
+		"newer, and both accept only \"5m\" or \"1h\"; any other value is ignored without a word.\n\n" +
+		"Hour-long entries cost more to write, so this pays off when your pauses sit between five minutes and " +
+		"an hour, and not when they are usually longer than that."
+
+	if already1h > 0 {
+		advice += fmt.Sprintf("\n\nNote that %s of these %s sessions were already on the hour, so the setting "+
+			"will not help those. Their pauses simply ran past it.",
+			fmtInt(int64(already1h)), fmtInt(int64(total)))
+	}
+	return advice + codex
 }
