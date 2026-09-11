@@ -58,6 +58,19 @@ A dated table per vendor. Cost per turn is
 `input*base + cache_read*read + cache_write_5m*w5 + cache_write_1h*w1 + output*out`.
 Codex has no TTL split; cache writes are billed at the base input rate.
 
+## Measured versus estimated
+
+Two kinds of number appear in this tool and they are not equally strong.
+
+The ledger and `tallybook changes` are **measured**: every figure is a token
+count the API charged, priced at the rate in force that day. A change compares
+real runs on one model against real runs on another.
+
+The findings' cheaper-model numbers are **estimated**: they price one model's
+recorded token counts at another model's rates, which is a claim about a run
+that never happened. The tokenizer section below is why that claim has a bound
+on it, and why a finding says so when it crosses one.
+
 ## Tokenizers
 
 The token counts in a transcript are the ones the API charged for, so the
@@ -76,6 +89,31 @@ way a comparison errs. When a suggested change crosses families, the finding
 keeps the arithmetic the transcript supports, adds a sentence naming the
 direction of the error, and drops one step of confidence. It never scales a
 number by a ratio the transcript never held.
+
+## Advice
+
+A finding ends in something to change, which means naming a real file and a
+real setting. One invented setting name shipped: `CLAUDE_CODE_CACHE_TTL`, which
+does not exist. Advice that names a setting nobody has is worse than no advice,
+because the reader follows it, nothing happens, and they stop believing the
+rest of the report.
+
+Two things guard against a repeat:
+
+* `internal/findings/settings.go` is the only place a configuration name may
+  come from. Each carries the documentation URL and the date it was checked. A
+  test scans the advice the rules generate and fails on any name that is not
+  there, and the detector is itself tested against the exact string that
+  shipped.
+* `internal/agentfile` reads the frontmatter of a project's own
+  `.claude/agents/*.md` files, so advice is checked against the config rather
+  than assumed. That is what lets a finding tell apart a file pinning the wrong
+  model, one pinning nothing, one saying `inherit`, one already saying the
+  right thing, and one that does not exist. Only frontmatter is read; the body
+  of an agent file is a system prompt and is never touched.
+
+Claude Code resolves a sub-agent's model at the call site first and the agent
+file second. An earlier version of the advice had that backwards.
 
 ## Findings
 
