@@ -25,26 +25,37 @@ A CLI for you, and an MCP server so your agent can check its own spend mid-sessi
 
 ## What it looks like
 
-Real output, from a sample project rather than anyone's private history.
+Real output from a working machine, trimmed to what the report itself shows: totals, counts and
+session-id prefixes. No file paths, prompts or command lines appear in a report.
 
 ```
 $ tallybook
 
-Scanned 11 sessions, 15 sub-agent runs (Aug 14 – Sep 8)
+Scanned 137 sessions, 94 sub-agent runs (Aug 20 – Sep 11)
 
 Last 30 days                          list price   share
-  Total                                  $503.43    100%
-  Main session turns                     $494.81     98%
-  Sub-agents                               $8.62      2%
+  Total                                $1,278.61    100%
+  Main session turns                   $1,108.36     87%
+  Sub-agents                             $170.25     13%
 
 Top findings (estimated saving / month)
 
- 1.  $8.58   Thinking was spent on turns that did no thinking low confidence
-             On 245 turns in the last 30 days, the model spent thinking tokens and then did noth…
- 2.  $1.33   Read-only sub-agents ran on Opus                 medium confidence
-             6 times in the last 30 days you launched a researcher agent and it only read files…
- 3.  $1.33   You asked for a cheaper model but got Opus       high confidence
-             6 times in the last 30 days your main session launched an agent and asked for Sonne…
+ 1. $260.22   Long sessions pay to carry their own history     medium confidence
+              27 sessions in the last 30 days grew past 100,000 tokens of conversation.
+ 2.  $29.74   Thinking was spent on turns that did no thinking low confidence
+              On 2,925 turns in the last 30 days, the model spent thinking tokens and then did no…
+ 3.  $13.52   Your saved context was rebuilt mid-session       medium confidence
+              In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
+ 4.  $10.17   An hour of cache lifetime went unused            high confidence
+              In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
+ 5.   $7.53   Identical tool calls were repeated               medium confidence
+              In 9 sessions in the last 30 days, a read-only tool was called with the same input…
+
+Also worth knowing
+
+ 8. 8 sessions look under-powered                              do not downgrade
+
+2 more findings. Run `tallybook findings` to see them all.
 
 Run `tallybook finding <n>` for evidence and the change to make.
 Savings are estimated one finding at a time. Where two touch the same runs
@@ -53,35 +64,95 @@ they overlap, so they do not add up.
 Prices are Anthropic and OpenAI list prices, verified 2026-09-10.
 ```
 
-Then the evidence and the change to make:
+The report stops at five so it stays readable. Everything the checks found, grouped by the kind of
+change each one asks for:
 
 ```
-$ tallybook finding 2
+$ tallybook findings
 
-Read-only sub-agents ran on Opus                     saves about $1.33/month
+Every finding in this window (estimated saving / month)
+
+Move work to a cheaper model
+
+ 6.   $3.37   Read-only sub-agents ran on Opus                 medium confidence
+              4 times in the last 30 days you launched a researcher agent and it only read files…
+ 7.   $1.86   Short look-ups ran on Opus                       medium confidence
+              8 of your own sessions in the last 30 days ran to 10 turns or fewer and only read:…
+
+Shrink what is sent every turn
+
+ 1. $260.22   Long sessions pay to carry their own history     medium confidence
+              27 sessions in the last 30 days grew past 100,000 tokens of conversation.
+ 5.   $7.53   Identical tool calls were repeated               medium confidence
+              In 9 sessions in the last 30 days, a read-only tool was called with the same input…
+
+Keep the prompt cache warm
+
+ 3.  $13.52   Your saved context was rebuilt mid-session       medium confidence
+              In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
+ 4.  $10.17   An hour of cache lifetime went unused            high confidence
+              In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
+
+Lower thinking effort
+
+ 2.  $29.74   Thinking was spent on turns that did no thinking low confidence
+              On 2,925 turns in the last 30 days, the model spent thinking tokens and then did no…
+
+Needs a stronger model or a better brief
+
+ 8.      --   8 sessions look under-powered                    do not downgrade
+              Sessions 81fd6a4a, bed422e3, 086db154 and 5 more tried the same kind of action 3 or…
+
+Run `tallybook finding <n>` for evidence and the change to make.
+```
+
+Then one finding in full, with the change to make:
+
+```
+$ tallybook finding 1
+
+Long sessions pay to carry their own history       saves about $260.22/month
 
   What happened
-  6 times in the last 30 days you launched a researcher agent and it only read
-  files and searched. It never edited anything or ran a command that changed
-  the project. Between them those runs used Glob, Grep and Read, and nothing
-  else.
+  27 sessions in the last 30 days grew past 100,000 tokens of conversation.
+  Across them, 4,580 turns ran above that mark, and the largest conversation
+  sent was 777,015 tokens.
 
   Why it costs money
-  Opus is billed at about 2.5x the rate of Sonnet for the same tokens. Reading
-  and summarising files is work the cheaper model does about as well, so you
-  pay the premium without getting the benefit.
+  Every turn sends the whole conversation again, so once a session is this
+  long, most of what is sent is history the task in hand no longer needs. Most
+  of it comes back from the cache at the cheaper read price, and the rest is
+  fresh input and cache writes, which is why it never looks like much on any
+  one turn and still comes to about $520.44 a month across these sessions. The
+  figure above is half of that, because a fresh session still has to be told
+  what it needs before it can carry on, and being told costs something too.
 
   What to change
-  ~/.claude/agents/researcher.md does not pin a model. Add this line to the
-  block at the top of the file:
+  Four things, in the order they pay off:
 
-    model: sonnet
+  - Run `/context` to see what is actually filling the window: it is often
+    one big file read or one long command output.
+  - Run `/clear` between unrelated tasks, rather than carrying the last
+    task's history into the next one.
+  - Run `/compact` at a natural break, while you can still say what matters,
+    rather than waiting for the automatic one to fire in the middle of
+    something.
+  - For a change that lasts, lower "autoCompactWindow" in
+    ~/.claude/settings.json so compaction starts earlier. It takes a token
+    count from 100k to 1M, written like "150k", or "auto".
+
+  Codex has no equivalent setting; there, starting a new session between tasks
+  is the lever.
 
   What to expect
-  Researcher runs should cost about 40% of what they do now. If their reports
-  start missing things, switch back. The next report will show whether the
-  error rate moved.
+  The share of turns running above 100,000 tokens should fall, and sessions
+  should stay quick and accurate for longer before they need clearing.
 ```
+
+When the change is a line in a file, the finding names the file and the line, and `--patch` prints
+it as a diff. A read-only sub-agent on Opus, say, gets `model: sonnet` for the block at the top of
+its `.claude/agents/<name>.md`, after tallybook has read that file to check the line is not already
+there.
 
 On a Max or Pro plan the share column leads instead, and the dollars are labelled as what the
 usage would have cost rather than what you paid.
@@ -93,9 +164,10 @@ usage would have cost rather than what you paid.
 | Report | `tallybook` |
 | Last week only | `tallybook --since 7d` |
 | One tool only | `tallybook --claude` or `tallybook --codex` |
+| Every finding, grouped by what to change | `tallybook findings` |
 | One finding, with evidence | `tallybook finding 1 --evidence` |
 | The change as a diff | `tallybook finding 1 --patch` |
-| Spend by sub-agent | `tallybook agents` |
+| Spend by sub-agent, with model and effort | `tallybook agents` |
 | Spend by session | `tallybook sessions --sort cost` |
 | One session in detail | `tallybook session 81fd6a4a` |
 | Did a change help? | `tallybook changes` |
@@ -137,6 +209,31 @@ strongest number the tool produces.
 Every finding has four parts: what happened, why it costs money, what to change, what to expect.
 The change names the file and the line. `--patch` prints it as a diff. Tallybook never edits your
 config.
+
+Thirteen checks run over every report. Each has a floor below which it says nothing, so a quiet
+report means nothing crossed it, not that nothing was checked.
+
+| Check | Asks you to |
+|---|---|
+| Read-only sub-agents ran on Opus or Fable | Pin a cheaper model in the agent file |
+| A launch asked for one model and got another | Fix the setting that overrode it |
+| Short, read-only main sessions ran on the top tier | Start look-ups with `/model sonnet` |
+| Read-only sub-agents ran at high or xhigh effort | Add `effort: medium` to the agent file |
+| Command output and file reads filled the context | Trim output; read big files in a sub-agent |
+| Long sessions paid to re-send history past 100k tokens | `/clear` between tasks; compact earlier |
+| The same read-only call repeated with identical input | Read once and keep the part you need |
+| A session was compacted again and again | Compact at a natural break; move big reads out |
+| A pause let the prompt cache expire | Keep the cache for an hour |
+| An hour of cache lifetime was paid for and never used | Drop back to five minutes |
+| Thinking tokens on turns that only handed off to a tool | Lower the effort level |
+| Sessions failed their way through a task | Give a fuller brief or a stronger model; not a saving |
+| List-price usage against what the plan costs | Nothing, unless the plan stops paying for itself |
+
+The last one needs `plan_price` in the config. Every threshold lives under `[findings]` in
+`config.toml`; `tallybook config init` writes an annotated copy with the defaults.
+
+Only the five biggest savings and two notes appear in the default report. `report_limit` and
+`min_saving_usd` in the config change that; `tallybook findings` always shows everything.
 
 ## Install
 
@@ -228,7 +325,7 @@ will call the tools itself.
 | `report` | The window's total, the split by tool and by model, and the findings with their ids |
 | `finding` | One finding in full by id: the four sections, the evidence, the patch |
 | `changes` | Every sub-agent model change with before, after and a verdict |
-| `agents` | Spend per sub-agent type |
+| `agents` | Spend per sub-agent type, with the model and effort level it mostly ran at |
 | `sessions` | Sessions by cost or by time |
 | `session` | One session turn by turn, by id or a unique prefix |
 | `prices` | The price table and when it was verified |
@@ -248,9 +345,15 @@ text, tool output or command lines, because the database never holds them.
 ## Privacy
 
 Read-only. Reads the frontmatter of your `.claude/agents` files to check its own advice, never
-their bodies, which are prompts. Stores token counts, tool names, models, timestamps and project
-paths in `~/.config/tallybook/tallybook.db`. Never stores prompt text, tool output or command
-lines. No network calls.
+their bodies, which are prompts. Stores token counts, tool names, models, effort levels,
+timestamps, project paths and a flag on turns that followed a compaction, in
+`~/.config/tallybook/tallybook.db`. Never stores prompt text, tool output or command lines. No
+network calls.
+
+To spot the same tool being called with the same input over and over, the database also holds a
+short hash of each call's input, salted with a random value generated when the database was
+created. The input itself is never written, the salt is never shown, and the hash cannot be turned
+back into a command or a path.
 
 ## Documentation
 

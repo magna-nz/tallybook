@@ -18,6 +18,46 @@ func TestLoadMissingFileGivesDefaults(t *testing.T) {
 	if cfg.Plan != PlanAuto || cfg.Findings.MinRuns != 3 || cfg.DefaultSince != "30d" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
+	if cfg.Findings.MinSavingUSD != 1.0 || cfg.Findings.ReportLimit != 5 {
+		t.Fatalf("unexpected report defaults: %+v", cfg.Findings)
+	}
+}
+
+func TestReportThresholdsFromFile(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.toml")
+	body := "[findings]\nmin_saving_usd = 2.5\nreport_limit = 3\n"
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFrom(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Findings.MinSavingUSD != 2.5 || cfg.Findings.ReportLimit != 3 {
+		t.Fatalf("report thresholds not applied: %+v", cfg.Findings)
+	}
+}
+
+func TestPlanPriceFromFile(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.toml")
+	body := "[findings]\nplan_price = 200\n"
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFrom(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Findings.PlanPriceUSD != 200 {
+		t.Fatalf("plan_price not applied: %+v", cfg.Findings)
+	}
+}
+
+func TestPlanPriceDefaultsToZero(t *testing.T) {
+	cfg := Default()
+	if cfg.Findings.PlanPriceUSD != 0 {
+		t.Fatalf("PlanPriceUSD default = %v, want 0", cfg.Findings.PlanPriceUSD)
+	}
 }
 
 func TestLoadFileAndEnv(t *testing.T) {
@@ -60,8 +100,12 @@ func TestExampleParses(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("TALLYBOOK_PLAN", "")
-	if _, err := LoadFrom(p); err != nil {
+	cfg, err := LoadFrom(p)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if cfg.Findings.MinSavingUSD != 1.0 || cfg.Findings.ReportLimit != 5 {
+		t.Fatalf("example does not carry the report thresholds: %+v", cfg.Findings)
 	}
 }
 

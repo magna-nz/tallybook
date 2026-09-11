@@ -17,22 +17,39 @@ No proxy, no API key, nothing leaves your machine. Run it as a CLI, or add `tall
 Claude Code or Codex and ask the agent itself what it's spending and what would be cheaper.
 
 ```
-$ tallybook --since 7d
+$ tallybook
 
-Scanned 4 sessions, 6 sub-agent runs (Sep 4 – Sep 10)
+Scanned 137 sessions, 94 sub-agent runs (Aug 20 – Sep 11)
 
-Last 7 days                           list price   share
-  Total                                  $118.40    100%
-  Main session turns                     $115.62     98%
-  Sub-agents                               $2.78      2%
+Last 30 days                          list price   share
+  Total                                $1,278.61    100%
+  Main session turns                   $1,108.36     87%
+  Sub-agents                             $170.25     13%
 
 Top findings (estimated saving / month)
 
- 1.  $8.58   Thinking was spent on turns that did no thinking low confidence
- 2.  $1.33   Read-only sub-agents ran on Opus                 medium confidence
- 3.  $1.33   You asked for a cheaper model but got Opus       high confidence
+ 1. $260.22   Long sessions pay to carry their own history     medium confidence
+              27 sessions in the last 30 days grew past 100,000 tokens of conversation.
+ 2.  $29.74   Thinking was spent on turns that did no thinking low confidence
+              On 2,925 turns in the last 30 days, the model spent thinking tokens and then did no…
+ 3.  $13.52   Your saved context was rebuilt mid-session       medium confidence
+              In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
+ 4.  $10.17   An hour of cache lifetime went unused            high confidence
+              In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
+ 5.   $7.53   Identical tool calls were repeated               medium confidence
+              In 9 sessions in the last 30 days, a read-only tool was called with the same input…
+
+Also worth knowing
+
+ 8. 8 sessions look under-powered                              do not downgrade
+
+2 more findings. Run `tallybook findings` to see them all.
 
 Run `tallybook finding <n>` for evidence and the change to make.
+Savings are estimated one finding at a time. Where two touch the same runs
+they overlap, so they do not add up.
+
+Prices are Anthropic and OpenAI list prices, verified 2026-09-10.
 ```
 
 ## Install
@@ -62,14 +79,22 @@ command = "tallybook-mcp"
 ## Use
 
 ```sh
-tallybook                         # this period's report and its findings
-tallybook finding 1 --evidence    # finding #1, with the data behind it
+tallybook                         # this period's report: the five biggest findings
+tallybook findings                # every finding, grouped by what kind of change it asks for
+tallybook finding 1               # finding #1 in full: what happened, why, what to change
+tallybook finding 1 --evidence    # the same, with the sessions behind it
 tallybook finding 1 --patch       # finding #1's fix, as an applyable diff
-tallybook agents                  # spend broken down by sub-agent type
+tallybook agents                  # spend by sub-agent type, with the model and effort each ran at
 tallybook sessions --sort cost    # sessions ranked by what they cost
 tallybook changes                 # did a past model swap actually save money?
 tallybook setup hook              # record sessions automatically as they end
 ```
+
+Thirteen checks run over every report: which model short look-ups and read-only sub-agents ran on,
+what effort they ran at, how much of each turn was history or repeated output, whether the prompt
+cache was paid for and then wasted, and whether a subscription is paying for itself. Each one names
+the setting or the habit to change, and says whether its number is measured or estimated. The full
+list is in [`docs/DESIGN.md`](docs/DESIGN.md#findings).
 
 ## Docs
 

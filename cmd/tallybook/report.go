@@ -46,6 +46,8 @@ func runReport(cmd *cobra.Command, flags *globalFlags) error {
 		Findings:     fs,
 		Plan:         ctx.plan,
 		PricesDated:  ctx.prices.Dated(),
+		MinSavingUSD: ctx.cfg.Findings.MinSavingUSD,
+		ReportLimit:  ctx.cfg.Findings.ReportLimit,
 		SkippedFiles: ctx.ingestResult.Failed,
 	}
 

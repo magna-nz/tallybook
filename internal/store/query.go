@@ -244,7 +244,7 @@ func (s *Store) attachModels(ids []string, result []SessionRow) error {
 // ToolCalls (and Agent launch data) attached.
 func (s *Store) Turns(sessionID string) ([]model.Turn, error) {
 	rows, err := s.db.Query(`
-		SELECT id, ts, model, effort, input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars
+		SELECT id, ts, model, effort, input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars, compaction_before
 		FROM turns WHERE session_id = ? ORDER BY ts`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("store: query turns: %w", err)
@@ -256,16 +256,18 @@ func (s *Store) Turns(sessionID string) ([]model.Turn, error) {
 	for rows.Next() {
 		var t model.Turn
 		var ts int64
+		var compactionBefore int
 		err := rows.Scan(
 			&t.ID, &ts, &t.Model, &t.Effort,
 			&t.Usage.Input, &t.Usage.CacheRead, &t.Usage.CacheWrite5m, &t.Usage.CacheWrite1h,
-			&t.Usage.Output, &t.Usage.Thinking, &t.TextChars,
+			&t.Usage.Output, &t.Usage.Thinking, &t.TextChars, &compactionBefore,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: scan turn: %w", err)
 		}
 		t.SessionID = sessionID
 		t.Timestamp = fromUnixNanos(ts)
+		t.CompactionBefore = compactionBefore != 0
 		indexByID[t.ID] = len(turns)
 		turns = append(turns, t)
 	}
@@ -274,7 +276,7 @@ func (s *Store) Turns(sessionID string) ([]model.Turn, error) {
 	}
 
 	tcRows, err := s.db.Query(`
-		SELECT turn_id, id, name, input_chars, class FROM tool_calls
+		SELECT turn_id, id, name, input_chars, class, input_hash FROM tool_calls
 		WHERE session_id = ? ORDER BY id`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("store: query tool_calls: %w", err)
@@ -284,7 +286,7 @@ func (s *Store) Turns(sessionID string) ([]model.Turn, error) {
 	for tcRows.Next() {
 		var turnID string
 		var tc model.ToolCall
-		if err := tcRows.Scan(&turnID, &tc.ID, &tc.Name, &tc.InputChars, &tc.Class); err != nil {
+		if err := tcRows.Scan(&turnID, &tc.ID, &tc.Name, &tc.InputChars, &tc.Class, &tc.InputHash); err != nil {
 			return nil, fmt.Errorf("store: scan tool_call: %w", err)
 		}
 		if idx, ok := indexByID[turnID]; ok {

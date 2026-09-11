@@ -85,6 +85,29 @@ func ReportJSON(w io.Writer, d ReportData) error {
 	return writeJSON(w, doc)
 }
 
+// findingsJSONDoc is the document FindingsJSON writes: the report's own
+// finding array, with nothing left out.
+type findingsJSONDoc struct {
+	Schema   int                 `json:"schema"`
+	Findings []reportFindingJSON `json:"findings"`
+}
+
+// FindingsJSON writes every finding as JSON, in the same shape and order the
+// report's "findings" array uses.
+func FindingsJSON(w io.Writer, fs []findings.Finding) error {
+	doc := findingsJSONDoc{Schema: 1}
+	for _, f := range fs {
+		doc.Findings = append(doc.Findings, reportFindingJSON{
+			Title:      f.Title,
+			SavingUSD:  f.SavingUSD,
+			Share:      f.SavingShare,
+			Confidence: string(f.Confidence),
+			Direction:  string(f.Direction),
+		})
+	}
+	return writeJSON(w, doc)
+}
+
 // findingJSONDoc is the document FindingJSON writes.
 type findingJSONDoc struct {
 	Schema int `json:"schema"`

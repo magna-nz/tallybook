@@ -63,9 +63,14 @@ func Session(w io.Writer, id string, source model.Source, turns []model.Turn, co
 	return bw.Flush()
 }
 
-// turnNote reports "cache rebuilt" when this turn's cache writes exceed
-// half of the previous turn's context size.
+// turnNote reports "compacted" when the conversation was compacted just
+// before this turn, else "cache rebuilt" when this turn's cache writes exceed
+// half of the previous turn's context size. Compaction wins because it is the
+// reason for the rebuild that follows it.
 func turnNote(t model.Turn, prevContext int64) string {
+	if t.CompactionBefore {
+		return "compacted"
+	}
 	writes := t.Usage.CacheWrite5m + t.Usage.CacheWrite1h
 	if prevContext > 0 && writes > prevContext/2 {
 		return "cache rebuilt"
