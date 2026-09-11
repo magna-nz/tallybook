@@ -2,6 +2,7 @@ package claude
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/magna-nz/tallybook/internal/model"
@@ -170,5 +171,50 @@ func TestParseSubAgentSession(t *testing.T) {
 	}
 	if len(names) != 2 || names[0] != "Grep" || names[1] != "Read" {
 		t.Errorf("tool names = %v, want [Grep Read]", names)
+	}
+}
+
+// TestParseCompactionMarkers exercises both shapes Claude Code uses to record
+// a context compaction: a system record with subtype "compact_boundary", and
+// a user record with a top-level "isCompactSummary". Either must set
+// CompactionBefore on the next new message.id seen after it, and only that
+// one turn.
+func TestParseCompactionMarkers(t *testing.T) {
+	path := filepath.Join("testdata", "compaction", "sess-compact.jsonl")
+	tr, err := Parse(path)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	if len(tr.Turns) != 4 {
+		t.Fatalf("got %d turns, want 4: %+v", len(tr.Turns), tr.Turns)
+	}
+
+	want := map[string]bool{
+		"msg_1": false, // before any compaction marker
+		"msg_2": true,  // right after the compact_boundary system record
+		"msg_3": true,  // right after the isCompactSummary user record
+		"msg_4": false, // the flag must not leak past the turn it was set on
+	}
+	for id, wantCompaction := range want {
+		turn := findTurn(t, tr.Turns, id)
+		if turn.CompactionBefore != wantCompaction {
+			t.Errorf("turn %s CompactionBefore = %v, want %v", id, turn.CompactionBefore, wantCompaction)
+		}
+	}
+}
+
+// An image block in a tool result is sized at a fixed allowance, not at the
+// length of its base64, which is what the API charges for and what stops a
+// screenshot from being counted as 150,000 tokens of context.
+func TestToolResultCharsSizesImagesByAllowance(t *testing.T) {
+	base64 := strings.Repeat("A", 600_000)
+	raw := []byte(`[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"` + base64 + `"}}]`)
+	if got := toolResultChars(raw); got != imageResultChars {
+		t.Errorf("image-only result Chars = %d, want %d", got, imageResultChars)
+	}
+	mixed := []byte(`[{"type":"text","text":"hello"},{"type":"image","source":{"data":"` + base64 + `"}}]`)
+	if got := toolResultChars(mixed); got != 5+imageResultChars {
+		t.Errorf("text+image result Chars = %d, want %d", got, 5+imageResultChars)
 	}
 }

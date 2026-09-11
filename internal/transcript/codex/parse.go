@@ -274,10 +274,11 @@ func Parse(path string) (*model.Transcript, error) {
 					continue
 				}
 				pendingCalls = append(pendingCalls, model.ToolCall{
-					ID:         p.CallID,
-					Name:       p.Name,
-					InputChars: len(p.Arguments),
-					Class:      classifyShellArgs(p.Name, []byte(p.Arguments)),
+					ID:          p.CallID,
+					Name:        p.Name,
+					InputChars:  len(p.Arguments),
+					Class:       classifyShellArgs(p.Name, []byte(p.Arguments)),
+					InputDigest: model.DigestInput(p.Name, []byte(p.Arguments)),
 				})
 
 			case "local_shell_call":
@@ -293,10 +294,11 @@ func Parse(path string) (*model.Transcript, error) {
 					id = fmt.Sprintf("local_shell-%d", len(pendingCalls)+1)
 				}
 				pendingCalls = append(pendingCalls, model.ToolCall{
-					ID:         id,
-					Name:       "local_shell",
-					InputChars: len(p.Action),
-					Class:      classifyShellArgs("local_shell", p.Action),
+					ID:          id,
+					Name:        "local_shell",
+					InputChars:  len(p.Action),
+					Class:       classifyShellArgs("local_shell", p.Action),
+					InputDigest: model.DigestInput("local_shell", p.Action),
 				})
 
 			case "custom_tool_call":
@@ -305,9 +307,10 @@ func Parse(path string) (*model.Transcript, error) {
 					continue
 				}
 				pendingCalls = append(pendingCalls, model.ToolCall{
-					ID:         p.CallID,
-					Name:       p.Name,
-					InputChars: len(p.Input),
+					ID:          p.CallID,
+					Name:        p.Name,
+					InputChars:  len(p.Input),
+					InputDigest: model.DigestInput(p.Name, []byte(p.Input)),
 				})
 
 			case "function_call_output", "custom_tool_call_output":

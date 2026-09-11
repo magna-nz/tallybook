@@ -7,7 +7,11 @@
 // cost; they only record counts and names.
 package model
 
-import "time"
+import (
+	"bytes"
+	"crypto/sha256"
+	"time"
+)
 
 // Source identifies which tool wrote the transcript.
 type Source string
@@ -65,6 +69,10 @@ type Turn struct {
 	Usage     Usage
 	TextChars int        // characters of visible assistant text
 	ToolCalls []ToolCall // tool invocations made in this response
+	// CompactionBefore is true when a context compaction happened between
+	// the previous turn and this one, so a rule can count how often, and how
+	// big the context was, without the store ever holding what got compacted.
+	CompactionBefore bool
 }
 
 // ToolCall is one tool invocation the model made.
@@ -75,8 +83,36 @@ type ToolCall struct {
 	// Class is ClassRead or ClassWrite for shell-style tools whose command
 	// could be classified, else "". See ClassifyCommand.
 	Class string
+	// InputDigest is the plain (unsalted) digest of this call's input, from
+	// DigestInput. It exists only so the store can turn it into a salted
+	// hash without ever being handed the input itself; a parser sets it and
+	// nothing downstream of the store ever reads it back. It never touches
+	// disk.
+	InputDigest [32]byte
+	// InputHash is the salted, truncated hash the store computed from
+	// InputDigest at ingest time, read back by Store.Turns so a rule can
+	// compare it across calls. It is empty for a ToolCall that never had a
+	// digest (for example one built by a test that leaves InputDigest zero),
+	// and it is always the zero value on a ToolCall a parser just produced,
+	// since nothing has hashed it yet.
+	InputHash string
 	// Agent is non-nil when this call launched a sub-agent.
 	Agent *AgentLaunch
+}
+
+// DigestInput is the plain SHA-256 of a tool name, a NUL byte, and the
+// trimmed serialized input that followed it. Parsers call this for every
+// tool call so a finding rule can later tell whether the same tool was
+// called twice with identical input, without the store ever holding the
+// input that produced the match.
+func DigestInput(name string, input []byte) [32]byte {
+	h := sha256.New()
+	h.Write([]byte(name))
+	h.Write([]byte{0})
+	h.Write(bytes.TrimSpace(input))
+	var out [32]byte
+	copy(out[:], h.Sum(nil))
+	return out
 }
 
 // AgentLaunch describes a sub-agent spawn. RequestedModel is what the caller

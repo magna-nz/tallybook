@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -416,4 +417,102 @@ func TestE2ENoIngestOnEmptyDB(t *testing.T) {
 	if !strings.Contains(out, "no sessions") {
 		t.Errorf("report output missing \"no sessions\":\n%s", out)
 	}
+}
+
+// TestE2EFindingsCommand runs `findings` over the fixtures and checks that
+// it lists every finding the report's JSON knows about, that its numbers are
+// the ones `finding <n>` takes, and that --json returns the same array.
+func TestE2EFindingsCommand(t *testing.T) {
+	e2eEnv(t)
+
+	reportOut, err := run(t, "--since", "all", "--json", "report")
+	if err != nil {
+		t.Fatalf("report --json: %v\noutput:\n%s", err, reportOut)
+	}
+	type findingsDoc struct {
+		Findings []struct {
+			Title     string `json:"title"`
+			Direction string `json:"direction"`
+		} `json:"findings"`
+	}
+	var reportDoc findingsDoc
+	if err := json.Unmarshal([]byte(reportOut), &reportDoc); err != nil {
+		t.Fatalf("report --json did not parse: %v\noutput:\n%s", err, reportOut)
+	}
+
+	jsonOut, err := run(t, "--since", "all", "--json", "findings")
+	if err != nil {
+		t.Fatalf("findings --json: %v\noutput:\n%s", err, jsonOut)
+	}
+	var listDoc findingsDoc
+	if err := json.Unmarshal([]byte(jsonOut), &listDoc); err != nil {
+		t.Fatalf("findings --json did not parse: %v\noutput:\n%s", err, jsonOut)
+	}
+	if len(listDoc.Findings) != len(reportDoc.Findings) {
+		t.Errorf("findings --json has %d findings, report --json has %d",
+			len(listDoc.Findings), len(reportDoc.Findings))
+	}
+	for i := range listDoc.Findings {
+		if i < len(reportDoc.Findings) && listDoc.Findings[i].Title != reportDoc.Findings[i].Title {
+			t.Errorf("findings[%d] = %q, report's = %q", i, listDoc.Findings[i].Title, reportDoc.Findings[i].Title)
+		}
+	}
+
+	out, err := run(t, "--since", "all", "findings")
+	if err != nil {
+		t.Fatalf("findings: %v\noutput:\n%s", err, out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if len(line) > 96 {
+			t.Errorf("findings line exceeds 96 columns (%d): %q", len(line), line)
+		}
+	}
+
+	if len(listDoc.Findings) == 0 {
+		if !strings.Contains(out, "No findings in this window.") {
+			t.Errorf("findings output on an empty window missing the no-findings line:\n%s", out)
+		}
+		return
+	}
+
+	if !strings.Contains(out, "Every finding in this window (estimated saving / month)") {
+		t.Errorf("findings output missing its heading:\n%s", out)
+	}
+	if !strings.Contains(out, "Run `tallybook finding <n>` for evidence and the change to make.") {
+		t.Errorf("findings output missing the closing line:\n%s", out)
+	}
+	// Every finding is listed, under a heading, with the number that
+	// `finding <n>` takes.
+	for i, f := range listDoc.Findings {
+		if !strings.Contains(out, f.Title) {
+			t.Errorf("findings output does not list %q:\n%s", f.Title, out)
+		}
+		wantPrefix := fmt.Sprintf("%2d. ", i+1)
+		found := false
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, wantPrefix) && strings.Contains(line, f.Title) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("findings output has no line %q%s:\n%s", wantPrefix, f.Title, out)
+		}
+	}
+
+	// The number a line carries really does resolve through `finding <n>`.
+	detail, err := run(t, "--since", "all", "--json", "finding", "1")
+	if err != nil {
+		t.Fatalf("finding 1: %v\noutput:\n%s", err, detail)
+	}
+	var one struct {
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal([]byte(detail), &one); err != nil {
+		t.Fatalf("finding 1 --json did not parse: %v\noutput:\n%s", err, detail)
+	}
+	if one.Title != listDoc.Findings[0].Title {
+		t.Errorf("finding 1 title %q != findings' first title %q", one.Title, listDoc.Findings[0].Title)
+	}
+
+	t.Log("\n" + strings.TrimRight(out, "\n"))
 }

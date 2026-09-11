@@ -70,6 +70,9 @@ type runSpec struct {
 	// most of these fixtures want; tests about overlapping runs set it so a
 	// short run can sit inside a long one.
 	duration time.Duration
+	// effort is written on every turn of the run; empty leaves it unset, which
+	// is what older transcripts look like.
+	effort string
 }
 
 // buildAgentRuns builds one parent transcript that launches len(specs)
@@ -117,6 +120,7 @@ func buildAgentRuns(t *testing.T, st *store.Store, parentID, agentType string, s
 				ID:        fmt.Sprintf("%s-t%d", childID, j),
 				Timestamp: spec.at.Add(time.Duration(j) * time.Minute),
 				Model:     spec.model,
+				Effort:    spec.effort,
 				Usage:     usage(2_000, 1_000),
 				ToolCalls: []model.ToolCall{{ID: tcID, Name: "Bash", InputChars: 50}},
 			})

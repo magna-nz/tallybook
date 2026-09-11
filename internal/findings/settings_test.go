@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"testing"
 	"time"
+
+	"github.com/magna-nz/tallybook/internal/store"
 )
 
 // settingLike matches the shapes a configuration name takes in our advice: a
@@ -27,6 +29,12 @@ var settingLike = regexp.MustCompile(
 		"|(?m)^\\s{2,}([a-zA-Z][a-zA-Z0-9]*):\\s" + // an indented key: value line
 		"|`(/[a-z][a-z0-9-]*)[ `]") // a backticked slash command
 
+// adviceFixtures is how a rule's own test file gets its rule scanned by
+// TestAdviceOnlyNamesKnownSettings: append, from an init function, a
+// function that ingests enough traffic for the rule to fire. A rule with no
+// fixture here is a rule whose advice is never checked for invented names.
+var adviceFixtures []func(t *testing.T, st *store.Store)
+
 // Advice that names a setting must name one that exists. A made-up name once
 // shipped to users; this is the guard that stops the next one.
 func TestAdviceOnlyNamesKnownSettings(t *testing.T) {
@@ -47,6 +55,11 @@ func TestAdviceOnlyNamesKnownSettings(t *testing.T) {
 	ingest(t, st, bloatedFixture("bloat1"))
 	ingest(t, st, retryFixture("retry1"))
 	relayFixture(t, st, 30)
+	// Rules added later register their own traffic from their own test files,
+	// so this guard scans every rule without every rule editing this one.
+	for _, fix := range adviceFixtures {
+		fix(t, st)
+	}
 
 	in := input(t, st)
 	in.Agents = agents(t, "researcher:", "reviewer:")

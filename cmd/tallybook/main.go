@@ -56,6 +56,7 @@ and what would have been cheaper. Nothing leaves your machine.`,
 
 	root.AddCommand(newReportCmd(flags))
 	root.AddCommand(newFindingCmd(flags))
+	root.AddCommand(newFindingsCmd(flags))
 	root.AddCommand(newAgentsCmd(flags))
 	root.AddCommand(newChangesCmd(flags))
 	root.AddCommand(newSessionsCmd(flags))

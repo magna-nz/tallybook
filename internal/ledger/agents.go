@@ -13,6 +13,7 @@ type AgentRow struct {
 	Agent       string
 	Runs        int
 	Model       string // most common canonical model across the agent's runs
+	Effort      string // most common effort level across the agent's turns; "" when none recorded
 	AvgUSD      float64
 	ReadOnlyPct float64
 	Errors      int
@@ -23,6 +24,7 @@ type AgentRow struct {
 type agentAgg struct {
 	runs        int
 	modelCounts map[string]int
+	effortCount map[string]int
 	usdTotal    float64
 	readOnly    int
 	errors      int
@@ -49,7 +51,7 @@ func Agents(st *store.Store, pr *pricing.Table, f store.Filter) ([]AgentRow, err
 		}
 		a, ok := byAgent[r.AgentType]
 		if !ok {
-			a = &agentAgg{modelCounts: map[string]int{}}
+			a = &agentAgg{modelCounts: map[string]int{}, effortCount: map[string]int{}}
 			byAgent[r.AgentType] = a
 		}
 		a.runs++
@@ -63,6 +65,9 @@ func Agents(st *store.Store, pr *pricing.Table, f store.Filter) ([]AgentRow, err
 		for _, t := range turns {
 			usd, _ := pr.CostAt(t.Model, t.Usage, t.Timestamp)
 			sessionUSD += usd
+			if t.Effort != "" {
+				a.effortCount[t.Effort]++
+			}
 			if t.Model == "" {
 				continue
 			}
@@ -89,6 +94,7 @@ func Agents(st *store.Store, pr *pricing.Table, f store.Filter) ([]AgentRow, err
 			Agent:       name,
 			Runs:        a.runs,
 			Model:       mostCommon(a.modelCounts),
+			Effort:      mostCommon(a.effortCount),
 			AvgUSD:      a.usdTotal / float64(a.runs),
 			ReadOnlyPct: float64(a.readOnly) / float64(a.runs),
 			Errors:      a.errors,

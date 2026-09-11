@@ -483,6 +483,7 @@ type AgentOut struct {
 	Agent         string  `json:"agent" jsonschema:"sub-agent type name"`
 	Runs          int     `json:"runs"`
 	Model         string  `json:"model" jsonschema:"the model most of its runs used"`
+	Effort        string  `json:"effort,omitempty" jsonschema:"the effort level most of its turns ran at; empty when the transcripts record none"`
 	AvgUSD        float64 `json:"avg_usd" jsonschema:"mean cost per run"`
 	ReadOnlyShare float64 `json:"read_only_share" jsonschema:"share of runs in which every tool call only read, 0..1"`
 	Errors        int     `json:"errors" jsonschema:"errored tool results across all runs"`
@@ -509,11 +510,15 @@ func (a *app) agents(in AgentsIn) (string, AgentsOut, error) {
 	fmt.Fprintln(&b, moneyNote(sc))
 	for _, r := range rows {
 		out.Agents = append(out.Agents, AgentOut{
-			Agent: r.Agent, Runs: r.Runs, Model: r.Model, AvgUSD: r.AvgUSD,
+			Agent: r.Agent, Runs: r.Runs, Model: r.Model, Effort: r.Effort, AvgUSD: r.AvgUSD,
 			ReadOnlyShare: r.ReadOnlyPct, Errors: r.Errors, Mismatched: r.Mismatched,
 		})
-		fmt.Fprintf(&b, "%s: %d runs on %s, %s per run, %.0f%% of runs read-only, %d errors, %d requested-model mismatches\n",
-			r.Agent, r.Runs, r.Model, fmtUSD(r.AvgUSD), r.ReadOnlyPct*100, r.Errors, r.Mismatched)
+		effort := ""
+		if r.Effort != "" {
+			effort = " at " + r.Effort + " effort"
+		}
+		fmt.Fprintf(&b, "%s: %d runs on %s%s, %s per run, %.0f%% of runs read-only, %d errors, %d requested-model mismatches\n",
+			r.Agent, r.Runs, r.Model, effort, fmtUSD(r.AvgUSD), r.ReadOnlyPct*100, r.Errors, r.Mismatched)
 	}
 	if len(rows) == 0 {
 		fmt.Fprintln(&b, "No sub-agent runs in this window.")

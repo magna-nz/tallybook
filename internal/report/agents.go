@@ -12,11 +12,15 @@ import (
 func Agents(w io.Writer, rows []ledger.AgentRow) error {
 	bw := bufio.NewWriter(w)
 
-	fmt.Fprintf(bw, "%-20s%6s%18s%10s%11s%8s  %s\n",
-		"agent", "runs", "model", "avg cost", "read-only", "errors", "requested≠actual")
+	fmt.Fprintf(bw, "%-20s%6s%18s%8s%10s%11s%8s  %s\n",
+		"agent", "runs", "model", "effort", "avg cost", "read-only", "errors", "requested≠actual")
 	for _, r := range rows {
-		fmt.Fprintf(bw, "%-20s%6d%18s%10s%10s%%%8d  %d\n",
-			truncate(r.Agent, 20), r.Runs, truncate(r.Model, 18),
+		effort := r.Effort
+		if effort == "" {
+			effort = "-"
+		}
+		fmt.Fprintf(bw, "%-20s%6d%18s%8s%10s%10s%%%8d  %d\n",
+			truncate(r.Agent, 20), r.Runs, truncate(r.Model, 18), effort,
 			fmtUSD(r.AvgUSD), fmt.Sprintf("%.0f", r.ReadOnlyPct*100), r.Errors, r.Mismatched)
 	}
 	if len(rows) == 0 {

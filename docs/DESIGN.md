@@ -46,11 +46,27 @@ and what a cheaper choice would have cost. Nothing is sent anywhere.
 
 ## What is stored
 
-Token counts, model ids, tool names, tool-call classes (read/write), result
-sizes, timestamps, session and project paths. Never prompt text, tool-result
-text, command lines, or sub-agent task briefs: the parser reads the Agent
-call's description to build the launch record, but the store writes it as an
-empty string.
+Token counts, model ids, effort levels, tool names, tool-call classes
+(read/write), result sizes, timestamps, session and project paths, and a
+flag on each turn that followed a context compaction. Never prompt text,
+tool-result text, command lines, or sub-agent task briefs: the parser reads
+the Agent call's description to build the launch record, but the store writes
+it as an empty string.
+
+One more column needs explaining. `tool_calls.input_hash` is a 16-character
+hash of each call's input, so a rule can see the same tool called with the
+identical input again and again without the store ever holding the input. The
+parser digests the input in memory; the store hashes that digest again with a
+random salt it generated on first open and keeps in its `meta` table, and
+writes the first 16 hex characters. Without the salt, the hash of a common
+command line could be looked up from a list; with it, two databases hash the
+same input differently and neither can be reversed. The salt is never printed
+or returned by any query.
+
+Tool results that are images are sized at a fixed 1,600 tokens each rather
+than the length of their base64, which is roughly what the API charges and
+about a hundred times less than the text would suggest. Before that, a session
+of screenshots was priced as if it were carrying a small library.
 
 ## Pricing
 
@@ -102,7 +118,7 @@ Two things guard against a repeat:
 
 * `internal/findings/settings.go` records every configuration name the advice
   may use, each with the documentation URL and the date it was checked. A test
-  runs all six rules, scans the advice they generate for anything shaped like a
+  runs every registered rule, scans the advice they generate for anything shaped like a
   setting, and fails on any name not in that list. It recognises quoted and
   backticked keys, environment variables, indented `key: value` lines in pasted
   snippets, and backticked slash commands. The detector is tested directly
@@ -122,4 +138,29 @@ file second. An earlier version of the advice had that backwards.
 
 Each finding is a rule over the store. It produces: title, estimated saving,
 confidence, plain-English body (what happened, why it costs, what to change,
-what to expect), and an evidence table.
+what to expect), and an evidence table. Every rule has a floor below which it
+says nothing, and every saving is either measured from the transcript or
+labelled as an estimate with the assumption stated in the prose.
+
+The rules, by the direction of the change they ask for:
+
+| Rule | Direction | What it looks for |
+|---|---|---|
+| `readonly-agent-on-strong-model` | downgrade | Sub-agents that only read, on Opus or Fable |
+| `requested-model-not-honoured` | config | A launch asked for one model and the run used another |
+| `main-session-on-strong-model` | downgrade | Short, read-only main sessions on the top tier |
+| `effort-on-read-only-agents` | effort | Read-only sub-agents at high or xhigh effort |
+| `tool-output-bloat` | context | Command output and file reads filling the context |
+| `long-context-tax` | context | Turns past 100k tokens paying to re-send history |
+| `repeated-tool-calls` | context | The same read-only call with the identical input, three or more times |
+| `repeated-compaction` | context | Main sessions compacted two or more times |
+| `cache-rebuilt-mid-session` | cache | Pauses that let the prompt cache expire |
+| `cache-1h-without-pauses` | cache | One-hour cache writes in sessions that never paused |
+| `thinking-on-relay` | effort | Thinking tokens on turns that only handed off to a tool |
+| `retry-loops` | upgrade | Sessions that failed their way through a task; not a saving |
+| `subscription-break-even` | config | List-price usage against what the plan costs; needs `plan_price` |
+
+The default report lists the five biggest savings and up to two notes, and
+counts the rest; `tallybook findings` lists everything grouped by direction.
+Both number findings by their position in the full list, so `tallybook
+finding <n>` means the same thing from either.

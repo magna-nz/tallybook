@@ -34,6 +34,16 @@ type rawRecord struct {
 	Effort        string          `json:"effort"`
 	Message       json.RawMessage `json:"message"`
 	ToolUseResult json.RawMessage `json:"toolUseResult"`
+	// Subtype distinguishes system records; the only one a rule needs is
+	// "compact_boundary", which marks that the harness just compacted
+	// context. compactMetadata (trigger, preTokens) rides along on that
+	// record but is never read: a rule only needs to know a compaction
+	// happened, not why or how big.
+	Subtype string `json:"subtype"`
+	// IsCompactSummary marks Claude Code's other compaction shape: a
+	// synthetic user record whose content is the summary prompt text. The
+	// text is never recorded; only the fact that a compaction happened is.
+	IsCompactSummary bool `json:"isCompactSummary"`
 }
 
 // assistantMessage is rawRecord.Message when Type == "assistant".
@@ -87,6 +97,10 @@ type textBlock struct {
 	Text string `json:"text"`
 }
 
+// imageResultChars is what one image block counts for when sizing a tool
+// result: about 1,600 tokens at the usual four characters per token.
+const imageResultChars = 1600 * 4
+
 type agentToolInput struct {
 	SubagentType string `json:"subagent_type"`
 	Model        string `json:"model"`
@@ -109,6 +123,9 @@ type turnBuilder struct {
 	usageSet  bool
 	textChars int
 	toolCalls []model.ToolCall
+	// compactionBefore is set when a compaction marker was seen before this
+	// message.id was first assigned a turnBuilder.
+	compactionBefore bool
 }
 
 // toolCallRef locates one ToolCall inside the turns being built, so that a
@@ -143,6 +160,10 @@ func Parse(path string) (*model.Transcript, error) {
 		toolResult []model.ToolResult
 		sessionID  string // sessionId field as written in the file
 		sawRecord  bool   // a structurally valid user or assistant record
+		// pendingCompaction is set by a compaction marker and cleared onto
+		// the first turnBuilder created after it, so the flag lands on the
+		// next assistant turn and only that one.
+		pendingCompaction bool
 	)
 
 	for scanner.Scan() {
@@ -154,6 +175,17 @@ func Parse(path string) (*model.Transcript, error) {
 		var rec rawRecord
 		if err := json.Unmarshal(line, &rec); err != nil {
 			continue // malformed line: skip
+		}
+		if rec.Type == "system" {
+			// A compact_boundary is the only system record a rule needs: it
+			// marks that the harness just compacted context, and the flag
+			// must land on the very next assistant turn. Every other system
+			// record (custom-title, last-prompt, queue-operation, ...) is
+			// still skipped exactly as before.
+			if rec.Subtype == "compact_boundary" {
+				pendingCompaction = true
+			}
+			continue
 		}
 		if rec.Type != "user" && rec.Type != "assistant" {
 			continue
@@ -206,6 +238,10 @@ func Parse(path string) (*model.Transcript, error) {
 				b = &turnBuilder{id: am.ID, model: am.Model, effort: rec.Effort}
 				byMsgID[am.ID] = b
 				order = append(order, am.ID)
+				if pendingCompaction {
+					b.compactionBefore = true
+					pendingCompaction = false
+				}
 			}
 			if tsErr == nil && (b.timestamp.IsZero() || ts.Before(b.timestamp)) {
 				b.timestamp = ts
@@ -220,9 +256,10 @@ func Parse(path string) (*model.Transcript, error) {
 					b.textChars += len(block.Text)
 				case "tool_use":
 					tc := model.ToolCall{
-						ID:         block.ID,
-						Name:       block.Name,
-						InputChars: len(bytes.TrimSpace(block.Input)),
+						ID:          block.ID,
+						Name:        block.Name,
+						InputChars:  len(bytes.TrimSpace(block.Input)),
+						InputDigest: model.DigestInput(block.Name, block.Input),
 					}
 					if block.Name == "Bash" {
 						var in struct {
@@ -257,6 +294,12 @@ func Parse(path string) (*model.Transcript, error) {
 			}
 
 		case "user":
+			if rec.IsCompactSummary {
+				// The summary text lives in this record's message content,
+				// but that is prompt text and is never recorded; only the
+				// fact that a compaction happened carries forward.
+				pendingCompaction = true
+			}
 			var um userMessage
 			if err := json.Unmarshal(rec.Message, &um); err != nil {
 				continue
@@ -321,14 +364,15 @@ func Parse(path string) (*model.Transcript, error) {
 	for _, msgID := range order {
 		b := byMsgID[msgID]
 		turns = append(turns, model.Turn{
-			SessionID: sess.ID,
-			ID:        b.id,
-			Timestamp: b.timestamp,
-			Model:     b.model,
-			Effort:    b.effort,
-			Usage:     b.usage,
-			TextChars: b.textChars,
-			ToolCalls: b.toolCalls,
+			SessionID:        sess.ID,
+			ID:               b.id,
+			Timestamp:        b.timestamp,
+			Model:            b.model,
+			Effort:           b.effort,
+			Usage:            b.usage,
+			TextChars:        b.textChars,
+			ToolCalls:        b.toolCalls,
+			CompactionBefore: b.compactionBefore,
 		})
 	}
 	sort.SliceStable(turns, func(i, j int) bool {
@@ -386,8 +430,15 @@ func parseToolResultBlocks(raw json.RawMessage) ([]toolResultBlock, bool) {
 }
 
 // toolResultChars implements the Chars sizing rule for a tool_result's
-// content field: length of the string, or the sum of text-block lengths,
-// or (if there are no text blocks) the length of the serialised array.
+// content field: length of the string, or the sum of text-block lengths plus
+// a fixed allowance per image block, or (if there are no text or image
+// blocks) the length of the serialised array.
+//
+// An image block carries its pixels as base64, which is far longer than what
+// the API charges for it: an image is billed by area, and one scaled to the
+// largest size the API accepts costs about 1,600 tokens. Counting the base64
+// made one screenshot look like 150,000 tokens of context, so a session full
+// of screenshots was priced as if it were carrying a small library.
 func toolResultChars(raw json.RawMessage) int {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {
@@ -406,8 +457,12 @@ func toolResultChars(raw json.RawMessage) int {
 			total := 0
 			found := false
 			for _, b := range blocks {
-				if b.Type == "text" {
+				switch b.Type {
+				case "text":
 					total += len(b.Text)
+					found = true
+				case "image":
+					total += imageResultChars
 					found = true
 				}
 			}

@@ -52,6 +52,12 @@ type Findings struct {
 	CacheGapMinutes    int      `toml:"cache_gap_minutes"`    // gap that counts as a cache expiry
 	RetryThreshold     int      `toml:"retry_threshold"`      // same tool+input repeats before it is a loop
 	ThinkingRelayTurns int      `toml:"thinking_relay_turns"` // relay turns with thinking before it is reported
+	MinSavingUSD       float64  `toml:"min_saving_usd"`       // smallest monthly saving the default report lists
+	ReportLimit        int      `toml:"report_limit"`         // how many findings the default report lists
+	PlanPriceUSD       float64  `toml:"plan_price"`           // subscription cost per month, USD; 0 turns off the break-even note
+	MainSessionTurns   int      `toml:"main_session_turns"`   // a main session this short and read-only is a look-up
+	LongContextTokens  int64    `toml:"long_context_tokens"`  // context size past which a turn is carrying history
+	RepeatThreshold    int      `toml:"repeat_threshold"`     // identical read-only calls before it is a repeat
 }
 
 // Default returns the configuration used when no file exists.
@@ -67,6 +73,11 @@ func Default() Config {
 			CacheGapMinutes:    5,
 			RetryThreshold:     3,
 			ThinkingRelayTurns: 20,
+			MainSessionTurns:   10,
+			LongContextTokens:  100_000,
+			RepeatThreshold:    3,
+			MinSavingUSD:       1.0,
+			ReportLimit:        5,
 		},
 	}
 }
@@ -177,6 +188,14 @@ min_runs = 3                # do not report a per-agent finding on fewer runs
 tool_output_share = 0.5     # report when tool output is more than half of context
 min_cache_rebuilds = 3      # per session
 cache_gap_minutes = 5       # pause that lets the prompt cache expire
+retry_threshold = 3         # errors from one tool inside six calls before a session looks under-powered
+thinking_relay_turns = 20   # relay turns with thinking, per agent, before it is reported
+min_saving_usd = 1.0        # leave a finding worth less than this out of the default report
+report_limit = 5            # how many findings the default report lists before "and N more"
+# plan_price = 200   # what your subscription costs per month, USD; turns on the break-even note
+main_session_turns = 10     # a main session this short that only read is a look-up
+long_context_tokens = 100000 # past this, a turn is mostly carrying history
+repeat_threshold = 3        # identical read-only calls before it counts as a repeat
 
 # Override or pin a price, USD per million tokens.
 # [prices."claude-opus-5"]

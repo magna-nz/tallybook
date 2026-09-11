@@ -63,6 +63,41 @@ func TestToolCountsCarryClassSuffix(t *testing.T) {
 	}
 }
 
+// TestCompactionBeforeRoundTrips checks that the flag a parser sets on a
+// Turn to say "context was compacted right before this one" survives a
+// write and a read back through the store.
+func TestCompactionBeforeRoundTrips(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/t.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ts := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	tr := &model.Transcript{
+		Session: model.Session{ID: "s", Source: model.SourceClaudeCode, Path: "/x/s", StartedAt: ts, EndedAt: ts},
+		Turns: []model.Turn{
+			{SessionID: "s", ID: "t1", Timestamp: ts, Model: "claude-opus-5"},
+			{SessionID: "s", ID: "t2", Timestamp: ts.Add(time.Minute), Model: "claude-opus-5", CompactionBefore: true},
+		},
+	}
+	if err := st.ReplaceTranscript(tr, 1, ts); err != nil {
+		t.Fatal(err)
+	}
+	turns, err := st.Turns("s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turns) != 2 {
+		t.Fatalf("len(turns) = %d, want 2", len(turns))
+	}
+	if turns[0].CompactionBefore {
+		t.Errorf("t1.CompactionBefore = true, want false")
+	}
+	if !turns[1].CompactionBefore {
+		t.Errorf("t2.CompactionBefore = false, want true")
+	}
+}
+
 func TestSourceFilter(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/t.db")
 	if err != nil {

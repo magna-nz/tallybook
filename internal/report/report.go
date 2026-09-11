@@ -31,6 +31,13 @@ type ReportData struct {
 	Plan        config.Plan
 	PricesDated string
 
+	// MinSavingUSD and ReportLimit shape the top-findings list: the smallest
+	// monthly saving worth listing and how many priced findings to print.
+	// Zero means "use the default". Neither affects ReportJSON, which always
+	// writes every finding.
+	MinSavingUSD float64
+	ReportLimit  int
+
 	SkippedFiles int // ingest.Result.Failed; 0 when not ingested or nothing failed
 }
 
@@ -93,20 +100,17 @@ func Report(w io.Writer, d ReportData) error {
 	}
 	fmt.Fprintln(bw)
 
+	top := SelectTop(d.Findings, d.MinSavingUSD, d.ReportLimit)
 	if len(d.Findings) == 0 {
 		fmt.Fprintln(bw, "No findings in this window. Nothing stood out as overpaid.")
 	} else {
-		fmt.Fprintln(bw, "Top findings (estimated saving / month)")
-		fmt.Fprintln(bw)
-		for i, f := range d.Findings {
-			writeFindingLine(bw, i+1, f, d.Plan)
-		}
+		writeTopFindings(bw, top, d.MinSavingUSD, d.Plan)
 	}
 	fmt.Fprintln(bw)
 	if len(d.Findings) > 0 {
 		fmt.Fprintln(bw, "Run `tallybook finding <n>` for evidence and the change to make.")
 	}
-	if len(d.Findings) > 1 {
+	if len(top.Priced) > 1 {
 		fmt.Fprintln(bw, "Savings are estimated one finding at a time. Where two touch the same runs")
 		fmt.Fprintln(bw, "they overlap, so they do not add up.")
 	}
@@ -123,13 +127,55 @@ func Report(w io.Writer, d ReportData) error {
 	return bw.Flush()
 }
 
+// writeTopFindings writes the report's findings section: the priced
+// findings worth listing, the notes under them, and the line that points at
+// `tallybook findings` when anything was held back.
+func writeTopFindings(w io.Writer, top TopFindings, minSavingUSD float64, plan config.Plan) {
+	if len(top.Priced) > 0 {
+		fmt.Fprintln(w, "Top findings (estimated saving / month)")
+		fmt.Fprintln(w)
+		for _, nf := range top.Priced {
+			writeFindingLine(w, nf.N, nf.Finding, plan)
+		}
+	}
+	if len(top.Info) > 0 {
+		if len(top.Priced) > 0 {
+			fmt.Fprintln(w)
+		}
+		fmt.Fprintln(w, "Also worth knowing")
+		fmt.Fprintln(w)
+		for _, nf := range top.Info {
+			writeNoteLine(w, nf.N, nf.Finding)
+		}
+	}
+	if len(top.Priced) == 0 && len(top.Info) == 0 {
+		floor := minSavingUSD
+		if floor <= 0 {
+			floor = defaultMinSavingUSD
+		}
+		fmt.Fprintf(w, "Nothing in this window is worth more than %s a month to change.\n", fmtUSD(floor))
+	}
+	if line := moreLine(top); line != "" {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, line)
+	}
+}
+
 // writeFindingLine writes one report row plus its indented first-sentence
-// continuation: " N. $58   Title                                    high confidence".
+// continuation: " N.   $58.00   Title". The confidence is deliberately not on
+// the line: it read as noise next to the money, and the finding's own text
+// says whether its number is measured or estimated. It stays in --json.
 func writeFindingLine(w io.Writer, n int, f findings.Finding, plan config.Plan) {
 	money := findingMoneyField(f, plan)
-	conf := confidenceLabel(f)
-	fmt.Fprintf(w, "%2d. %6s   %-48s %s\n", n, money, truncate(f.Title, 48), conf)
-	fmt.Fprintf(w, "%13s%s\n", "", firstSentence(f.WhatHappened))
+	// Seven characters of money: a three-figure monthly saving is not rare.
+	fmt.Fprintf(w, "%2d. %7s   %s\n", n, money, f.Title)
+	fmt.Fprintf(w, "%14s%s\n", "", firstSentence(f.WhatHappened))
+}
+
+// writeNoteLine writes one Info finding as a single line, with no money
+// column and no continuation sentence.
+func writeNoteLine(w io.Writer, n int, f findings.Finding) {
+	fmt.Fprintf(w, "%2d. %s\n", n, f.Title)
 }
 
 // dateRange formats an earliest/latest pair like "Jun 12 – Sep 10". A zero

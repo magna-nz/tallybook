@@ -4,7 +4,10 @@
 package store
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -16,11 +19,22 @@ import (
 // Store wraps a SQLite database holding ingested transcripts.
 type Store struct {
 	db *sql.DB
+	// salt is 16 random bytes generated once per database and kept in the
+	// meta table. It is mixed into every tool call's input digest before
+	// that digest is written down, so the stored hash cannot be reversed or
+	// compared against a hash from a different tallybook database. It is
+	// never written to a log, an error, or returned by any query.
+	salt []byte
 }
 
 const schema = `
 CREATE TABLE IF NOT EXISTS schema_version (
 	version INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS meta (
+	key   TEXT PRIMARY KEY,
+	value TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS files (
@@ -56,6 +70,7 @@ CREATE TABLE IF NOT EXISTS turns (
 	output          INTEGER,
 	thinking        INTEGER,
 	text_chars      INTEGER,
+	compaction_before INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY (session_id, id)
 );
 
@@ -66,6 +81,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (
 	name        TEXT,
 	input_chars INTEGER,
 	class       TEXT NOT NULL DEFAULT '',
+	input_hash  TEXT NOT NULL DEFAULT '',
 	PRIMARY KEY (session_id, id)
 );
 
@@ -128,6 +144,12 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
+	salt, err := loadOrCreateSalt(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	var count int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_version`).Scan(&count); err != nil {
 		db.Close()
@@ -140,12 +162,57 @@ func Open(path string) (*Store, error) {
 		}
 	}
 
-	return &Store{db: db}, nil
+	return &Store{db: db, salt: salt}, nil
 }
 
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+// loadOrCreateSalt returns the per-database salt used to hash tool call
+// inputs, generating and storing one the first time a database is opened.
+// The salt is kept hex-encoded in the meta table and never appears anywhere
+// else: not in a query result, not in a log line, not in an error message.
+func loadOrCreateSalt(db *sql.DB) ([]byte, error) {
+	var encoded string
+	err := db.QueryRow(`SELECT value FROM meta WHERE key = 'salt'`).Scan(&encoded)
+	if err == nil {
+		salt, decErr := hex.DecodeString(encoded)
+		if decErr != nil {
+			return nil, fmt.Errorf("store: decode salt: %w", decErr)
+		}
+		return salt, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, fmt.Errorf("store: read salt: %w", err)
+	}
+
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, fmt.Errorf("store: generate salt: %w", err)
+	}
+	if _, err := db.Exec(`INSERT INTO meta(key, value) VALUES ('salt', ?)`, hex.EncodeToString(salt)); err != nil {
+		return nil, fmt.Errorf("store: store salt: %w", err)
+	}
+	return salt, nil
+}
+
+// hashInput turns a tool call's in-memory digest into the value written to
+// tool_calls.input_hash: salt the digest, hash again, and keep only the
+// first 16 hex characters. That is enough entropy to tell two different
+// inputs apart without keeping a column wide enough to look like it might
+// hold the input itself. A zero digest (a tool call the parser never set
+// one for) stores as the empty string rather than a hash of nothing.
+func (s *Store) hashInput(digest [32]byte) string {
+	var zero [32]byte
+	if digest == zero {
+		return ""
+	}
+	h := sha256.New()
+	h.Write(s.salt)
+	h.Write(digest[:])
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
 // FileState reports what was recorded for a transcript path at last ingest.
@@ -213,16 +280,16 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 	}
 
 	turnStmt, err := tx.Prepare(`
-		INSERT OR REPLACE INTO turns(session_id, id, ts, model, effort, input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		INSERT OR REPLACE INTO turns(session_id, id, ts, model, effort, input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars, compaction_before)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("store: prepare turn insert: %w", err)
 	}
 	defer turnStmt.Close()
 
 	toolCallStmt, err := tx.Prepare(`
-		INSERT OR REPLACE INTO tool_calls(session_id, turn_id, id, name, input_chars, class)
-		VALUES (?, ?, ?, ?, ?, ?)`)
+		INSERT OR REPLACE INTO tool_calls(session_id, turn_id, id, name, input_chars, class, input_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("store: prepare tool_call insert: %w", err)
 	}
@@ -237,17 +304,21 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 	defer launchStmt.Close()
 
 	for _, turn := range t.Turns {
+		compactionBefore := 0
+		if turn.CompactionBefore {
+			compactionBefore = 1
+		}
 		_, err = turnStmt.Exec(
 			newSessionID, turn.ID, toUnixNanos(turn.Timestamp), turn.Model, turn.Effort,
 			turn.Usage.Input, turn.Usage.CacheRead, turn.Usage.CacheWrite5m, turn.Usage.CacheWrite1h,
-			turn.Usage.Output, turn.Usage.Thinking, turn.TextChars,
+			turn.Usage.Output, turn.Usage.Thinking, turn.TextChars, compactionBefore,
 		)
 		if err != nil {
 			return fmt.Errorf("store: insert turn %s: %w", turn.ID, err)
 		}
 
 		for _, tc := range turn.ToolCalls {
-			_, err = toolCallStmt.Exec(newSessionID, turn.ID, tc.ID, tc.Name, tc.InputChars, tc.Class)
+			_, err = toolCallStmt.Exec(newSessionID, turn.ID, tc.ID, tc.Name, tc.InputChars, tc.Class, s.hashInput(tc.InputDigest))
 			if err != nil {
 				return fmt.Errorf("store: insert tool_call %s: %w", tc.ID, err)
 			}
@@ -363,16 +434,32 @@ func uniqueNonEmpty(ids ...string) []string {
 // migrate brings a database created by an older tallybook up to the current
 // schema. Every step must be safe to run twice.
 func migrate(db *sql.DB) error {
-	has, err := hasColumn(db, "tool_calls", "class")
-	if err != nil {
-		return err
-	}
-	if !has {
-		if _, err := db.Exec(`ALTER TABLE tool_calls ADD COLUMN class TEXT NOT NULL DEFAULT ''`); err != nil {
-			return fmt.Errorf("store: add tool_calls.class: %w", err)
+	added := false
+
+	for _, col := range []struct {
+		table, name, ddl string
+	}{
+		{"tool_calls", "class", `ALTER TABLE tool_calls ADD COLUMN class TEXT NOT NULL DEFAULT ''`},
+		{"tool_calls", "input_hash", `ALTER TABLE tool_calls ADD COLUMN input_hash TEXT NOT NULL DEFAULT ''`},
+		{"turns", "compaction_before", `ALTER TABLE turns ADD COLUMN compaction_before INTEGER NOT NULL DEFAULT 0`},
+	} {
+		has, err := hasColumn(db, col.table, col.name)
+		if err != nil {
+			return err
 		}
-		// Old rows have no class; the next ingest refreshes changed files only,
-		// so force a full re-read by forgetting file states.
+		if has {
+			continue
+		}
+		if _, err := db.Exec(col.ddl); err != nil {
+			return fmt.Errorf("store: add %s.%s: %w", col.table, col.name, err)
+		}
+		added = true
+	}
+
+	if added {
+		// Old rows have no value in whichever column just showed up, and a
+		// rule may now depend on it; the next ingest refreshes changed files
+		// only, so force a full re-read by forgetting file states.
 		if _, err := db.Exec(`DELETE FROM files`); err != nil {
 			return fmt.Errorf("store: reset files after migration: %w", err)
 		}
