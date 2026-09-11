@@ -85,15 +85,34 @@ Numbers are illustrative. On a Max or Pro plan the dollar column becomes share o
 | Spend by sub-agent | `tallybook agents` |
 | Spend by session | `tallybook sessions --sort cost` |
 | One session in detail | `tallybook session 81fd6a4a` |
+| Did a change help? | `tallybook changes` |
 | Machine-readable | `tallybook --json` |
 | What was scanned | `tallybook status` |
 | The price table | `tallybook prices` |
 | Write a config file | `tallybook config init` |
+| Record sessions automatically | `tallybook setup hook` |
 
 `--since` takes `7d`, `30d`, `90d`, `all`, or a date. `--project <path>` limits to one repo.
 
 The plan is read from Claude Code's login. Force it with `--currency usd|share` or
 `plan = "api"` / `plan = "subscription"` in the config.
+
+## Did it help?
+
+`tallybook changes` finds every point where a sub-agent's model changed and
+compares the runs either side of it.
+
+```
+implementer: Opus 5 to Sonnet 5, 10 Sep                                 keep
+
+  Before  3 runs   $3.14 each   7% of tool calls failed
+  After   5 runs   $0.22 each   5% of tool calls failed
+
+  About 93% cheaper per run, and nothing started failing more. Worth keeping.
+```
+
+This one is measured, not estimated. Both sides are real runs that really
+happened, so it is the strongest number the tool produces.
 
 ## What it finds
 
@@ -113,11 +132,25 @@ Or:
 go install github.com/magna-nz/tallybook/cmd/tallybook@latest
 ```
 
-Needs Claude Code or Codex CLI with sessions in their default folders. macOS or Linux. No API key.
+Needs Claude Code or Codex CLI with sessions in their default folders. macOS, Linux or Windows.
+No API key.
+
+## Recording sessions automatically
+
+```sh
+tallybook setup hook
+```
+
+Prints a `SessionEnd` hook for `~/.claude/settings.json`; `--write` adds it for you. It records
+each session as it ends, so reports are instant, and appends a line per session to
+`~/.config/tallybook/sessions.log`. Claude Code does not show a hook's output, so that file is
+where the line goes.
 
 ## Privacy
 
-Read-only. Stores token counts, tool names, models, timestamps and project paths in
+Read-only. Reads the frontmatter of your `.claude/agents` files to check its own advice, never
+their bodies, which are prompts. Stores token counts, tool names, models, timestamps and project
+paths in
 `~/.config/tallybook/tallybook.db`. Never stores prompt text, tool output or command lines. No
 network calls.
 
@@ -126,3 +159,7 @@ network calls.
 
 * [`docs/DESIGN.md`](docs/DESIGN.md) — parsing rules, pricing formula, what is stored.
 * Prices verified 2026-09-10. `tallybook prices` shows the table.
+
+One limitation worth stating: the Codex parser was built from the Codex source and synthetic
+fixtures, and has not yet been run against a real Codex session. The Claude Code side has been
+run against several hundred.
