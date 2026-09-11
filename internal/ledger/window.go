@@ -68,3 +68,20 @@ func AllSince(st *store.Store) time.Time {
 	}
 	return earliest
 }
+
+// Prior is the window of the same length that ended the moment w began, so
+// a report can say whether this window cost more or less than the last one.
+// An "all" window has nothing before it, and ok is false.
+func Prior(w Window) (prior Window, ok bool) {
+	if w.Since.IsZero() || !w.Until.After(w.Since) {
+		return Window{}, false
+	}
+	span := w.Until.Sub(w.Since)
+	since := w.Since.Add(-span)
+	return Window{
+		Since: since,
+		Until: w.Since,
+		Days:  span.Hours() / 24,
+		Label: label(since, w.Since),
+	}, true
+}

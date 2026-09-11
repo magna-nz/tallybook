@@ -80,7 +80,10 @@ Two kinds of number appear in this tool and they are not equally strong.
 
 The ledger and `tallybook changes` are **measured**: every figure is a token
 count the API charged, priced at the rate in force that day. A change compares
-real runs on one model against real runs on another.
+real runs on one model against real runs on another. So are the cache hit rate
+(cache reads over every input-side token) and everything `--compare` prints:
+the prior window is the same filter shifted back one window length, and both
+sides are priced the same way.
 
 The findings' cheaper-model numbers are **estimated**: they price one model's
 recorded token counts at another model's rates, which is a claim about a run

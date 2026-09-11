@@ -112,3 +112,16 @@ func Total(sessions []SessionCost, st *store.Store, pr *pricing.Table) (Totals, 
 
 	return tot, nil
 }
+
+// CacheHitRate is the share of everything sent to the model that was read
+// back from the prompt cache rather than processed afresh: cache reads over
+// every input-side token, which is fresh input, cache reads and both kinds
+// of cache write. It is the one number that says whether caching is doing
+// its job. Zero when nothing was sent.
+func (t Totals) CacheHitRate() float64 {
+	sent := t.Usage.ContextTokens()
+	if sent <= 0 {
+		return 0
+	}
+	return float64(t.Usage.CacheRead) / float64(sent)
+}

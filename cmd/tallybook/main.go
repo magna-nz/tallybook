@@ -53,6 +53,7 @@ and what would have been cheaper. Nothing leaves your machine.`,
 	root.PersistentFlags().StringVar(&flags.db, "db", "", "path to the tallybook database (overrides config)")
 	root.PersistentFlags().BoolVar(&flags.claude, "claude", false, "only Claude Code sessions (default: every source)")
 	root.PersistentFlags().BoolVar(&flags.codex, "codex", false, "only Codex CLI sessions (default: every source)")
+	root.Flags().BoolVar(&flags.compare, "compare", false, "also show the window before this one, and how spend moved")
 
 	root.AddCommand(newReportCmd(flags))
 	root.AddCommand(newFindingCmd(flags))

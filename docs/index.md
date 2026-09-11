@@ -4,473 +4,90 @@ title: Tallybook
 
 # Tallybook
 
-Prices every Claude Code and Codex session on your disk, shows what each agent cost over any
-period, and tells you in plain English what would have been cheaper.
+Tallybook prices every Claude Code and Codex session on your disk, shows what each agent cost over
+any period, and says in plain English what would have been cheaper. It is a command-line tool and
+an MCP server. Nothing leaves your machine.
 
-A CLI for you, and an MCP server so your agent can check its own spend mid-session.
-
-[← Back to the repo](https://github.com/magna-nz/tallybook)
+[Repository](https://github.com/magna-nz/tallybook) ·
+[Releases](https://github.com/magna-nz/tallybook/releases/latest) ·
+[Design notes](https://github.com/magna-nz/tallybook/blob/main/docs/DESIGN.md)
 
 ## Contents
 
-* [What it looks like](#what-it-looks-like)
-* [Use](#use)
-* [Did it help?](#did-it-help)
-* [What it finds](#what-it-finds)
+* [How it works](#how-it-works)
+* [Installation](#installation)
+* [Quick start](#quick-start)
+* [CLI reference](#cli-reference)
+  * [Global options](#global-options)
+  * [Windows](#windows)
+  * [Commands](#commands)
+  * [Exit codes](#exit-codes)
+* [Reading a report](#reading-a-report)
+* [Findings reference](#findings-reference)
 * [Configuration](#configuration)
-* [Install](#install)
-* [Recording sessions automatically](#recording-sessions-automatically)
-* [Ask your agent mid-session](#ask-your-agent-mid-session)
-* [Privacy](#privacy)
-* [Documentation](#documentation)
-
-## What it looks like
-
-Real output from a working machine on a Max plan, which is why the share column leads and the
-dollars are labelled as a list-price equivalent. On API billing the dollar column leads and the
-numbers are a bill. A report shows totals, counts and session-id prefixes; no file paths, prompts or
-command lines ever appear in one.
-
-```
-$ tallybook
-
-Scanned 137 sessions, 96 sub-agent runs (Aug 20 – Sep 11)
-
-Last 30 days                     share list-price equiv.
-  Total                           100%         $1,289.13
-  Main session turns               86%         $1,113.08
-  Sub-agents                       14%           $176.05
-
-Top findings (estimated saving / month)
-
- 1.     20%   Long sessions pay to carry their own history
-              27 sessions in the last 30 days grew past 100,000 tokens of conversation.
- 2.      2%   Thinking was spent on turns that did no thinking
-              On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
- 3.      1%   Your saved context was rebuilt mid-session
-              In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
- 4.      1%   An hour of cache lifetime went unused
-              In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
- 5.      1%   Identical tool calls were repeated
-              In 9 sessions in the last 30 days, a read-only tool was called with the same input…
-
-Also worth knowing
-
- 8. 8 sessions look under-powered
- 9. Your plan is paying for itself
-
-2 more findings. Run `tallybook findings` to see them all.
-
-Run `tallybook finding <n>` for evidence and the change to make.
-Savings are estimated one finding at a time. Where two touch the same runs
-they overlap, so they do not add up.
-
-You are on a subscription: dollars are what this usage would cost on the API, not what you paid.
-Share is the number to watch.
-```
-
-The report stops at five so it stays readable. Everything the checks found, grouped by the kind of
-change each one asks for:
-
-```
-$ tallybook findings
-
-Every finding in this window (estimated saving / month)
-
-Move work to a cheaper model
-
- 6.     <1%   Read-only sub-agents ran on Opus
-              4 times in the last 30 days you launched a researcher agent and it only read files…
- 7.     <1%   Short look-ups ran on Opus
-              8 of your own sessions in the last 30 days ran to 10 turns or fewer and only read:…
-
-Shrink what is sent every turn
-
- 1.     20%   Long sessions pay to carry their own history
-              27 sessions in the last 30 days grew past 100,000 tokens of conversation.
- 5.      1%   Identical tool calls were repeated
-              In 9 sessions in the last 30 days, a read-only tool was called with the same input…
-
-Keep the prompt cache warm
-
- 3.      1%   Your saved context was rebuilt mid-session
-              In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
- 4.      1%   An hour of cache lifetime went unused
-              In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
-
-Lower thinking effort
-
- 2.      2%   Thinking was spent on turns that did no thinking
-              On 2,935 turns in the last 30 days, the model spent thinking tokens and then did no…
-
-A setting is not doing what you think
-
- 9.      --   Your plan is paying for itself
-              At list price, your usage in the last 30 days works out to about $1,289.13 a month,…
-
-Needs a stronger model or a better brief
-
- 8.      --   8 sessions look under-powered
-              Sessions 81fd6a4a, bed422e3, 086db154 and 5 more tried the same kind of action 3 or…
-
-Run `tallybook finding <n>` for evidence and the change to make.
-```
-
-Then one finding in full, with the change to make:
-
-```
-$ tallybook finding 1
-
-Long sessions pay to carry their own history   frees about 20% of your usage
-
-  What happened
-  27 sessions in the last 30 days grew past 100,000 tokens of conversation.
-  Across them, 4,606 turns ran above that mark, and the largest conversation
-  sent was 777,015 tokens.
-
-  Why it costs money
-  Every turn sends the whole conversation again, so once a session is this
-  long, most of what is sent is history the task in hand no longer needs. Most
-  of it comes back from the cache at the cheaper read price, and the rest is
-  fresh input and cache writes, which is why it never looks like much on any
-  one turn and still comes to about $522.75 a month across these sessions. The
-  figure above is half of that, because a fresh session still has to be told
-  what it needs before it can carry on, and being told costs something too.
-
-  What to change
-  Four things, in the order they pay off:
-
-  - Run `/context` to see what is actually filling the window: it is often
-    one big file read or one long command output.
-  - Run `/clear` between unrelated tasks, rather than carrying the last
-    task's history into the next one.
-  - Run `/compact` at a natural break, while you can still say what matters,
-    rather than waiting for the automatic one to fire in the middle of
-    something.
-  - For a change that lasts, lower "autoCompactWindow" in
-    ~/.claude/settings.json so compaction starts earlier. It takes a token
-    count from 100k to 1M, written like "150k", or "auto".
-
-  Codex has no equivalent setting; there, starting a new session between tasks
-  is the lever.
-
-  What to expect
-  The share of turns running above 100,000 tokens should fall, and sessions
-  should stay quick and accurate for longer before they need clearing.
-```
-
-When the change is a line in a file, the finding names the file and the line, and `--patch` prints
-it as a diff. A read-only sub-agent on Opus, say, gets `model: sonnet` for the block at the top of
-its `.claude/agents/<name>.md`, after tallybook has read that file to check the line is not already
-there.
-
-Two more, for the habits rather than the settings:
-
-```
-$ tallybook finding 5
-
-Identical tool calls were repeated              frees about 1% of your usage
-
-  What happened
-  In 9 sessions in the last 30 days, a read-only tool was called with the same
-  input 3 or more times in a row, 11 repeated groups in total. The worst case:
-  Read was called with the same input 28 times in session 490ddd47.
-
-  Why it costs money
-  Every call after the first puts the same result back into the conversation,
-  and from then on it is carried on every later turn, even though nothing
-  about it changed.
-
-  What to change
-  Habits, not settings. Add these lines to CLAUDE.md so they apply to every
-  session:
-
-    - Read a file once and quote the part you need, rather than reading it again.
-    - After an edit, re-read only the changed range, not the whole file.
-    - Use a sub-agent for a survey that would otherwise read the same files more than once.
-
-  For Codex, the same three lines belong in AGENTS.md.
-
-  What to expect
-  Repeated reads of the same input should drop to zero. Sessions stay usable
-  for longer because less of the context is a copy of something already sent.
-```
-
-```
-$ tallybook finding 7
-
-Short look-ups ran on Opus frees <1% of your usage, about $1.86 a month at list price
-
-  What happened
-  8 of your own sessions in the last 30 days ran to 10 turns or fewer and only
-  read: they looked at files and searched, and never edited anything or ran a
-  command that changed the project. These are the sessions you drove yourself,
-  not the sub-agents they launched. Together they cost $3.10. In 3 of them the
-  model called no tools at all: a question and an answer.
-
-  Why it costs money
-  Opus is billed at about 2.5x the rate of Sonnet for the same tokens. A
-  question that takes a few file reads and a paragraph of answer is work the
-  cheaper model does about as well, so on these sessions you paid the premium
-  without getting anything for it.
-
-  What to change
-  This is a habit rather than a file, so there is nothing to edit. Start a
-  quick look-up with `/model sonnet`, then press s to keep that choice for
-  this session only, which leaves your saved default untouched.
-
-  What to expect
-  Sessions like these should cost about 40% of what they do now. If the
-  answers start getting worse, switch back: there is nothing to undo.
-```
-
-And the per-agent table, which now says what effort level each agent mostly ran at:
-
-```
-$ tallybook agents
-
-agent                 runs             model  effort  avg cost  read-only  errors  requested≠actual
-implementer             52   claude-sonnet-5    high     $2.12         0%      75  0
-verifier                15     claude-opus-5    high     $2.66         0%      22  0
-general-purpose         20   claude-sonnet-5    high     $0.89         0%       4  0
-researcher               6   claude-opus-4-8    high     $1.09       100%       0  0
-claude-code-guide        2   claude-sonnet-5    high     $0.19        50%       0  0
-```
-
-## Use
-
-| Command | Example |
-|---|---|
-| Report | `tallybook` |
-| Last week only | `tallybook --since 7d` |
-| One tool only | `tallybook --claude` or `tallybook --codex` |
-| Every finding, grouped by what to change | `tallybook findings` |
-| One finding, with evidence | `tallybook finding 1 --evidence` |
-| The change as a diff | `tallybook finding 1 --patch` |
-| Spend by sub-agent, with model and effort | `tallybook agents` |
-| Spend by session | `tallybook sessions --sort cost` |
-| One session in detail | `tallybook session 81fd6a4a` |
-| Did a change help? | `tallybook changes` |
-| Including ones too new to judge | `tallybook changes --all` |
-| Machine-readable | `tallybook --json` |
-| What was scanned | `tallybook status` |
-| The price table | `tallybook prices` |
-| Write a config file | `tallybook config init` |
-| Record sessions automatically | `tallybook setup hook` |
-
-`--since` takes `7d`, `30d`, `90d`, `all`, or a date. `--project <path>` limits to one repo.
-
-The plan is read from Claude Code's login. Force it with `--currency usd|share` or
-`plan = "api"` / `plan = "subscription"` in the config.
-
-## Did it help?
-
-`tallybook changes` finds every point where a sub-agent's model changed and compares the runs
-either side of it. Runs that overlapped in time are not a change: dispatching a wave of
-sub-agents with mixed models is a choice, not a switch. Changes with too few runs on one side to
-judge are counted rather than printed; `--all` shows them.
-
-```
-$ tallybook changes
-
-implementer: Opus 5 to Sonnet 5, 4 Sep                                  keep
-
-  Before  4 runs   $1.07 each   9% of tool calls failed
-  After   5 runs   $0.43 each   5% of tool calls failed
-
-  About 60% cheaper per run, and nothing started failing more. Worth keeping.
-```
-
-This one is measured, not estimated. Both sides are real runs that really happened, so it is the
-strongest number the tool produces.
-
-## What it finds
-
-Every finding has four parts: what happened, why it costs money, what to change, what to expect.
-The change names the file and the line. `--patch` prints it as a diff. Tallybook never edits your
-config.
-
-Thirteen checks run over every report. Each has a floor below which it says nothing, so a quiet
-report means nothing crossed it, not that nothing was checked. Two kinds of number appear and
-they are not equally strong: a **measured** figure is a token count the API charged, priced at the
-rate in force that day; an **estimated** figure prices one model's recorded tokens at another
-model's rates, or assumes a fraction, and the prose says which assumption it made. Where a
-cheaper-model estimate crosses a tokenizer family (Opus 4.7 and later against Sonnet 4.6 and
-earlier), the finding adds a sentence naming the direction of the error and drops one step of
-confidence.
-
-### Move work to a cheaper model
-
-**Read-only sub-agents ran on Opus or Fable** (`readonly-agent-on-strong-model`, medium). A
-sub-agent run in which every tool call only looked at the project (Read, Grep, Glob, a `git
-status`) and nothing edited or ran a command that changed anything. Grouped by agent type, priced
-at the cheaper model's rates: estimated. Needs `min_runs` runs of that agent. The advice reads
-the agent's own `.claude/agents/<name>.md` and says whether to add `model: sonnet`, change the
-line it has, or leave it because it already says so. `--patch` prints the diff.
-
-**Short look-ups ran on Opus** (`main-session-on-strong-model`, medium). The same idea for the
-sessions you drive yourself: at most `main_session_turns` turns, every tool call read-only, or
-no tool calls at all (a question and an answer), on the Opus or Fable tier. Estimated at the
-cheaper model's rates. Needs three such sessions. The advice is a habit, `/model sonnet` and
-then `s` to keep it for the session only; when more than half of your main sessions look like
-this, it also suggests making the cheaper model the default in `~/.claude/settings.json`.
-
-### A setting is not doing what you think
-
-**You asked for a cheaper model but got Opus** (`requested-model-not-honoured`, high). The Agent
-call asked for one model and the child's own turns ran on another. The saving is what those runs
-would have cost at the model you asked for. Claude Code resolves a sub-agent's model at the call
-site first and the agent file second; the advice says which one overrode you.
-
-**Your plan against list price** (`subscription-break-even`). Only on a subscription, only with
-`plan_price` set, and only on a window of at least 14 days. Scales the window's list-price total
-to 30 days and compares it with the plan. Under the plan price it is a low-confidence saving with
-a note that rate limits, bundled features and the one-hour cache default differ; over it, an
-informational note that the plan is paying for itself.
-
-### Shrink what is sent every turn
-
-**Command output is filling your context** (`tool-output-bloat`, medium). Sessions that sent more
-than 200,000 tokens of context in total, where raw tool output carried for the rest of the
-session made up at least `tool_output_share` of it. Assumes trimming halves the cost of re-reading
-that output: estimated. The advice is three lines for CLAUDE.md.
-
-**Long sessions pay to carry their own history** (`long-context-tax`, medium). Every turn whose
-context exceeded `long_context_tokens`. The tax on such a turn is its input-side cost (fresh
-input, cache reads and cache writes, never output) scaled by the share of the context above the
-threshold. That tax is measured; the claimed saving is half of it, because a fresh session still
-has to be told what it needs. Needs three sessions with at least $0.50 of tax each. The advice is
-`/context`, `/clear` between tasks, `/compact` at a natural break, and `autoCompactWindow` for a
-lasting change.
-
-**Identical tool calls were repeated** (`repeated-tool-calls`, medium). The same read-only tool
-called with byte-identical input at least `repeat_threshold` times in one session, seen through
-the salted hash described under [Privacy](#privacy). Each repeat's result is carried on every
-later turn, so the cost is result tokens times the turns that followed, at the cache-read rate.
-That claim is capped at what the session measurably spent on cache reads, and image results are
-sized at what the API charges for an image rather than the length of their base64. Needs two
-sessions and $1. The advice is habits for CLAUDE.md or AGENTS.md.
-
-**Your sessions are compacting more than once** (`repeated-compaction`, informational). Claude
-Code main sessions with two or more compactions. The summarising request is a separate call the
-transcript never records, so no dollar figure is claimed; the evidence shows the context size just
-before each compaction. Codex has no compaction marker to find.
-
-### Keep the prompt cache warm
-
-**Your saved context was rebuilt mid-session** (`cache-rebuilt-mid-session`, medium). A pause
-longer than `cache_gap_minutes` followed by a turn that re-wrote at least half the previous
-context to the cache. The waste is the write price less the read price for those tokens:
-measured. Needs `min_cache_rebuilds` in a session. The transcript records whether each write took
-the five-minute or the one-hour lifetime, so the advice knows whether `promptCacheTtl` would have
-helped or whether the pauses simply ran past an hour.
-
-**An hour of cache lifetime went unused** (`cache-1h-without-pauses`). The mirror image: sessions
-where most cache writes took the one-hour lifetime and no pause between turns ever exceeded five
-minutes. The premium is the one-hour write rate less the five-minute rate on those tokens:
-measured. On API billing it is high confidence and the fix is `promptCacheTtl` set to `5m`. On a
-subscription it is low confidence, because the hour is the default Claude Code picks within plan
-usage and is not billed per token, and the finding says there is nothing to act on today.
-
-### Lower thinking effort
-
-**Thinking was spent on turns that did no thinking** (`thinking-on-relay`, low). Turns with one
-tool call, under 200 characters of visible text, and thinking tokens: a hand-off, not an answer.
-Grouped by agent; needs `thinking_relay_turns` of them. The thinking is priced at the output
-rate, and the advice is the effort setting.
-
-**Read-only sub-agents ran at high effort** (`effort-on-read-only-agents`, low). A sub-agent run
-that only read, with every turn at high, xhigh or max effort. Assumes dropping to medium halves
-its thinking tokens: estimated, and said so. Needs three runs of the agent. The advice is `effort:
-medium` in the agent file, with a patch; never a session-wide effort change, which would slow the
-main session too.
-
-### Needs a stronger model or a better brief
-
-**Sessions look under-powered** (`retry-loops`, informational). One tool failing
-`retry_threshold` or more times inside six consecutive calls, or a quarter of at least eight
-calls erroring. This is the counterweight to the downgrade findings: these sessions needed a
-fuller brief or a stronger model, and moving them to a cheaper one would make it worse. Never a
-saving.
-
-### Reading the report
-
-The default report lists the five biggest savings, then up to two notes under "Also worth
-knowing", then one line counting what it left out. A saving below `min_saving_usd` a month is
-counted rather than listed. `tallybook findings` lists everything, grouped as above. Both number
-findings by their position in the full list, so `tallybook finding <n>` means the same thing
-from either, and the printed numbers may skip. `--json` always carries every finding.
-
-Savings are estimated one finding at a time. Two findings that touch the same runs overlap, so
-they do not add up, and the report says so whenever it prints more than one.
-
-## Configuration
-
-`tallybook config init` writes an annotated `config.toml` to `~/.config/tallybook` (or
-`$XDG_CONFIG_HOME/tallybook`, or `$TALLYBOOK_DIR`). Every key is optional.
-
-| Key | Default | What it does |
-|---|---|---|
-| `plan` | `auto` | `api` reports dollars as a bill; `subscription` leads with share. `auto` reads Claude Code's login. |
-| `default_since` | `30d` | The window when `--since` is not given. |
-| `db_path` | `<config dir>/tallybook.db` | Where the ledger lives. |
-| `claude_roots`, `codex_roots` | `~/.claude/projects`, `~/.codex/sessions` | Where transcripts are read from. |
-| `[prices."<model>"]` | built-in table | Override or pin a price, USD per million tokens. |
-
-Under `[findings]`:
-
-| Key | Default | Used by |
-|---|---|---|
-| `disabled` | `[]` | Rule ids to skip entirely. |
-| `min_runs` | `3` | Per-agent findings: runs before an agent is reported. |
-| `tool_output_share` | `0.5` | Tool output as a share of context before it is bloat. |
-| `min_cache_rebuilds` | `3` | Rebuilds in one session before it is reported. |
-| `cache_gap_minutes` | `5` | A pause this long counts as a cache expiry. |
-| `retry_threshold` | `3` | Errors from one tool inside six calls. |
-| `thinking_relay_turns` | `20` | Relay turns with thinking, per agent. |
-| `main_session_turns` | `10` | A main session this short that only read is a look-up. |
-| `long_context_tokens` | `100000` | Past this, a turn is mostly carrying history. |
-| `repeat_threshold` | `3` | Identical read-only calls before it is a repeat. |
-| `min_saving_usd` | `1.0` | Smallest monthly saving the default report lists. |
-| `report_limit` | `5` | How many findings the default report lists. |
-| `plan_price` | unset | Your subscription's monthly price; turns on the break-even note. |
-
-The plan can also be forced per run with `--currency usd|share`, and the database with `--db`.
-
-## Install
-
-### macOS and Linux
+  * [Config file](#config-file)
+  * [Environment variables](#environment-variables)
+  * [Plan detection](#plan-detection)
+* [MCP server reference](#mcp-server-reference)
+  * [Registering the server](#registering-the-server)
+  * [Behaviour](#behaviour)
+  * [Common inputs](#common-inputs)
+  * [Tools](#tools)
+  * [Calling the tools](#calling-the-tools)
+* [Hooks](#hooks)
+* [Privacy and data](#privacy-and-data)
+
+## How it works
+
+1. **Ingest.** Tallybook reads the transcript files Claude Code and Codex already write to disk
+   and records token counts, model ids, tool names and timestamps in a SQLite ledger under your
+   config directory. Files that have not changed since the last run are skipped, so repeat runs are
+   fast.
+2. **Price.** Every model response is priced at the vendor's list rate in force on that day, split
+   across fresh input, cache reads, cache writes and output.
+3. **Report.** The ledger is rolled up by window, session, sub-agent type and model.
+4. **Find.** Thirteen rules run over the window and produce findings: what happened, why it costs
+   money, what to change, and what to expect. Each names a real file, setting or habit.
+
+Two kinds of number appear and they are not equally strong. A **measured** figure is a token count
+the API charged, priced at the rate for that day: the ledger, `changes`, `--compare` and the cache
+hit rate are all measured. An **estimated** figure prices one model's recorded tokens at another
+model's rates, or assumes a fraction; every estimated finding states the assumption in its text.
+
+Tallybook is read-only. It never edits your configuration and never makes a network call. See
+[Privacy and data](#privacy-and-data) for exactly what the ledger holds.
+
+## Installation
+
+### Homebrew (macOS and Linux)
 
 ```sh
 brew install --cask magna-nz/tap/tallybook
 ```
 
-That pulls in [magna-nz/homebrew-tap](https://github.com/magna-nz/homebrew-tap) on the way, so
-there is no separate `brew tap` step. Upgrade and remove with `brew upgrade --cask tallybook` and
-`brew uninstall --cask tallybook`.
+The tap is added on the way, so there is no separate `brew tap` step. Upgrade with
+`brew upgrade --cask tallybook` and remove with `brew uninstall --cask tallybook`. The build is
+unsigned; the cask clears the quarantine flag so macOS runs it without a trip to System Settings.
 
-The build is unsigned, so macOS would otherwise refuse to run it. The cask strips the quarantine
-flag on install, which is why it opens without a detour through System Settings.
-
-### With Go
+### Go
 
 ```sh
 go install github.com/magna-nz/tallybook/cmd/tallybook@latest
+go install github.com/magna-nz/tallybook/cmd/tallybook-mcp@latest
 ```
 
-Puts the binary in `$(go env GOPATH)/bin`, which needs to be on your `PATH`.
+Binaries land in `$(go env GOPATH)/bin`, which must be on your `PATH`.
 
-### From a release
+### Release archive
 
 Download the archive for your platform from the
 [latest release](https://github.com/magna-nz/tallybook/releases/latest), unpack it, and put
-`tallybook` somewhere on your `PATH`. macOS and Linux builds are provided for both Intel and ARM,
-Windows for amd64 and arm64.
-
-On macOS a downloaded archive is quarantined, so clear the flag before the first run:
+`tallybook` and `tallybook-mcp` on your `PATH`. macOS and Linux builds are provided for Intel and
+ARM, Windows for amd64 and arm64. A downloaded archive is quarantined on macOS; clear it before the
+first run:
 
 ```sh
-xattr -dr com.apple.quarantine ./tallybook
+xattr -dr com.apple.quarantine ./tallybook ./tallybook-mcp
 ```
 
 ### From source
@@ -480,88 +97,399 @@ Go 1.27 or newer.
 ```sh
 git clone https://github.com/magna-nz/tallybook.git
 cd tallybook
-go build ./cmd/tallybook
+go build ./cmd/tallybook ./cmd/tallybook-mcp
 ```
 
 ### Requirements
 
-Claude Code or Codex CLI, with sessions where they put them by default:
-`~/.claude/projects` (or under `CLAUDE_CONFIG_DIR` if you have set it) and `~/.codex/sessions`.
-macOS, Linux or Windows. No API key and no account of any kind. Tallybook only reads files that
-are already on your disk.
+Claude Code or Codex CLI, with sessions where they put them by default: `~/.claude/projects` (or
+under `CLAUDE_CONFIG_DIR`) and `~/.codex/sessions` (or under `CODEX_HOME`). No API key and no
+account.
 
-### Check it worked
+## Quick start
 
 ```sh
 tallybook --version
-tallybook --since 7d
+tallybook                       # the last 30 days, with the top five findings
+tallybook findings              # every finding, grouped by the change it asks for
+tallybook finding 1 --evidence  # the first finding in full, with the sessions behind it
 ```
 
-## Recording sessions automatically
+## CLI reference
+
+```
+tallybook [global options] [command] [command options] [arguments]
+```
+
+With no command, `tallybook` runs `report`. Every command honours the global options.
+
+### Global options
+
+| Option | Value | Default | Effect |
+|---|---|---|---|
+| `--since` | `7d`, `30d`, `90d`, `all`, or `YYYY-MM-DD` | `default_since` from config, `30d` | The reporting window. See [Windows](#windows). |
+| `--project` | path | every project | Restrict to one project directory. An exact match, or a prefix match when the path ends with `/`. |
+| `--claude` | | | Only Claude Code sessions. |
+| `--codex` | | | Only Codex sessions. Passing both flags, or neither, includes every source. |
+| `--currency` | `usd` or `share` | detected plan | Force the currency: `usd` reports dollars as a bill, `share` reports share of usage with dollars as a list-price equivalent. See [Plan detection](#plan-detection). |
+| `--json` | | | Write a JSON document instead of text. Supported by every reporting command; see the [commands table](#commands). |
+| `--no-ingest` | | | Do not scan for new or changed transcripts; report from the ledger as it stands. |
+| `--db` | path | `db_path` from config | The ledger database to use. |
+| `--compare` | | | Report only: also show the window of the same length before this one, and how each figure moved. Refused with `--since all`. |
+| `-v`, `--version` | | | Print the version and exit. |
+| `-h`, `--help` | | | Help for the command. |
+
+### Windows
+
+`--since` sets the window every reporting command reads.
+
+| Value | Window |
+|---|---|
+| `7d`, `30d`, `90d` | The last N days, ending now. |
+| `YYYY-MM-DD` | From that date, in local time, until now. |
+| `all` | Every session in the ledger. The window's length is taken from the earliest session. |
+
+Findings normalise their savings to 30 days from whatever window is in use, so a `7d` window
+reports "per month" figures scaled from one week. `--compare` needs a bounded window; the prior
+window is the same length and ends the moment this one starts.
+
+### Commands
+
+| Command | Arguments | Options | Prints | `--json` |
+|---|---|---|---|---|
+| `report` (default) | | `--compare` | Scan summary, window totals, cache hit rate, the top findings and how many more there are. | yes |
+| `findings` | | | Every finding in the window, grouped by direction, numbered as in `report`. | yes |
+| `finding` | `<n>` | `--evidence`, `--patch` | One finding in full: the four sections, and with `--evidence` the table of sessions or runs behind it. `--patch` prints only the unified diff of the file change, for piping to `patch` or `git apply`. | yes |
+| `agents` | | | Spend per sub-agent type: runs, the model and effort it mostly ran at, average cost per run, the share of runs that only read, errored tool results, and requested-versus-actual model mismatches. | yes |
+| `sessions` | | `--sort cost\|time`, `--limit N` | Sessions in the window with what each cost. `time` is most recent first (default); `cost` is most expensive first. `--limit` defaults to 20; `0` shows every row. Sub-agent runs are their own rows. | yes |
+| `session` | `<id-or-prefix>` | | One session turn by turn: model, effort, token counts and cost per response, with notes for cache rebuilds and compactions, and the sub-agents it launched. The id may be any unique prefix. | yes |
+| `changes` | | `--all`, `--min-runs N` | Every point where a sub-agent type's model changed, with the runs before and after compared and a verdict: keep, watch, revert, or too early. `--min-runs` (default 3) is how many runs each side needs before a verdict; `--all` also prints the changes that fall short. | yes |
+| `status` | | | Where the database and transcript roots are, how many sessions each holds, what the last scan did, the detected plan and why, and when prices were verified. | yes |
+| `prices` | | | The price table every figure is computed from, in USD per million tokens, including overrides from your config. | yes |
+| `config init` | | `--force` | Write an annotated `config.toml` with every key and its default. Refuses to overwrite unless `--force`. | no |
+| `config path` | | | Print the config file location. | no |
+| `setup hook` | | `--write` | Print the Claude Code `SessionEnd` hook that records each session as it ends; `--write` merges it into `~/.claude/settings.json`. | no |
+| `hook session-end` | | | The hook entry point. Reads Claude Code's JSON on stdin, records that one transcript, appends one line to `sessions.log`. Never exits non-zero. | no |
+| `completion` | `bash\|zsh\|fish\|powershell` | | Shell completion script. | no |
+
+#### Examples
 
 ```sh
-tallybook setup hook
+# The default report for the last 7 days, dollars as a bill even on a subscription.
+tallybook --since 7d --currency usd
+
+# This week against last week.
+tallybook --since 7d --compare
+
+# Only Codex sessions since a date, as JSON, for a script.
+tallybook --since 2026-08-01 --codex --json
+
+# One repository only. The trailing slash makes it a prefix, so worktrees under it count.
+tallybook --project ~/code/myapp/
+
+# Every finding, then the third one with its evidence, then its fix as a diff.
+tallybook findings
+tallybook finding 3 --evidence
+tallybook finding 3 --patch | git apply
+
+# The ten most expensive sessions, then one of them by prefix.
+tallybook sessions --sort cost --limit 10
+tallybook session 81fd6a4a
+
+# Did switching a sub-agent's model help? Include changes too new to judge.
+tallybook changes --all --min-runs 2
+
+# Report from the ledger without rescanning, against a different database.
+tallybook --no-ingest --db /tmp/other.db status
+
+# Write the config file, then find it.
+tallybook config init
+tallybook config path
 ```
 
-Prints a `SessionEnd` hook for `~/.claude/settings.json`; `--write` adds it for you. It records
-each session as it ends, so reports are instant, and appends a line per session to
-`~/.config/tallybook/sessions.log`. Claude Code does not show a hook's output, so that file is
-where the line goes.
+### Exit codes
 
-## Ask your agent mid-session
+| Code | Meaning |
+|---|---|
+| `0` | Success. |
+| `1` | A runtime error: the database could not be opened, a transcript root could not be read, and so on. The message is on stderr. |
+| `2` | A usage error: an unknown `--since` value, `--currency` other than `usd` or `share`, `--compare` with `--since all`, `config init` over an existing file without `--force`. |
+
+`hook session-end` always exits `0`, because a hook that fails would fail the session that
+called it.
+
+## Reading a report
+
+A report has four parts, in order.
+
+**Scan summary.** How many main sessions and sub-agent runs were found, and the span of dates they
+cover.
+
+**Totals.** The window's cost, split into main-session turns and sub-agents, and by source when
+both Claude Code and Codex are present. On API billing the dollar column leads and is a bill; on a
+subscription the share column leads and the dollars are labelled as a list-price equivalent. The
+**cache hit rate** line is the share of everything sent to the model that came back from the prompt
+cache rather than being processed afresh: cache reads over fresh input, cache reads and both kinds
+of cache write. Claude Code usually sits in the high nineties; a fall means something is
+invalidating the cache.
+
+**Comparison** (with `--compare`). The window of the same length that ended where this one started,
+and how each figure moved: total, main-session and sub-agent spend, session and run counts, and the
+cache hit rate. A move under one percent reads as "about the same"; equal figures read "no change";
+a figure that was zero reads "new". The hit rate moves in points. An empty prior window says so in
+one line.
+
+**Findings.** The five biggest savings, each with its estimated saving per 30 days, then up to two
+notes under "Also worth knowing", then one line counting what was left out. A saving under
+`min_saving_usd` a month is counted rather than listed. `tallybook findings` lists everything,
+grouped by the kind of change each asks for. Both number findings by their position in the full
+list, so `tallybook finding <n>` means the same thing from either, and the printed numbers may
+skip. Savings are estimated one finding at a time; two that touch the same runs overlap and do not
+add up.
+
+## Findings reference
+
+Every finding has four sections: what happened, why it costs money, what to change, what to expect.
+Each rule has a floor below which it says nothing, so a quiet report means nothing crossed a floor,
+not that nothing was checked. Rules can be disabled by id with the `disabled` config key.
+
+| Id | Direction | Looks for | Number | Threshold keys | Asks you to |
+|---|---|---|---|---|---|
+| `readonly-agent-on-strong-model` | downgrade | Sub-agent runs whose every tool call only read, on the Opus or Fable tier | estimated at the cheaper model's rates | `min_runs` | Add `model: sonnet` (or the named alternative) to the agent file; `--patch` prints the diff |
+| `main-session-on-strong-model` | downgrade | Main sessions of at most `main_session_turns` turns that only read, or called no tools, on the Opus or Fable tier | estimated | `main_session_turns` | Start look-ups with `/model sonnet`; make it the default when more than half of sessions qualify |
+| `requested-model-not-honoured` | config | An Agent call asked for one model and the run used another | estimated at the requested model's rates | `min_runs` | Fix the setting that overrode the request; the advice names which one |
+| `subscription-break-even` | config | List-price usage, scaled to 30 days, against `plan_price` | measured | `plan_price`; window of at least 14 days | Nothing while the plan pays for itself; consider API billing if it stops |
+| `tool-output-bloat` | context | Sessions over 200k context tokens where carried tool output is at least `tool_output_share` of it | estimated: assumes trimming halves the re-read cost | `tool_output_share` | Three habits for CLAUDE.md |
+| `long-context-tax` | context | Turns whose context exceeds `long_context_tokens`; the tax is the input-side cost scaled by the share above the threshold | measured tax; the saving is half of it | `long_context_tokens` | `/context`, `/clear` between tasks, `/compact` at a break, `autoCompactWindow` |
+| `repeated-tool-calls` | context | The same read-only call with byte-identical input at least `repeat_threshold` times in a session | carried cost, capped at the session's measured cache-read spend | `repeat_threshold` | Habits for CLAUDE.md or AGENTS.md |
+| `repeated-compaction` | context | Claude Code main sessions compacted two or more times | none; informational | | `/clear`, `/compact` at a break, sub-agents for big reads, `autoCompactWindow` |
+| `cache-rebuilt-mid-session` | cache | A pause over `cache_gap_minutes` followed by a turn that re-wrote at least half the context | measured: write price less read price | `min_cache_rebuilds`, `cache_gap_minutes` | `promptCacheTtl` set to `1h`, unless the pauses already ran past an hour |
+| `cache-1h-without-pauses` | cache | Sessions where one-hour cache writes dominate and no pause exceeded five minutes | measured: the one-hour premium | | `promptCacheTtl` set to `5m` on API billing; nothing on a subscription, where the hour is free within plan usage |
+| `thinking-on-relay` | effort | Turns with one tool call, under 200 characters of text, and thinking tokens | measured thinking cost | `thinking_relay_turns` | Lower the effort level |
+| `effort-on-read-only-agents` | effort | Sub-agent runs that only read, with every turn at high, xhigh or max effort | estimated: assumes medium halves thinking | `min_runs` | `effort: medium` in the agent file; `--patch` prints the diff |
+| `retry-loops` | upgrade | One tool failing `retry_threshold` or more times inside six calls, or a quarter of at least eight calls erroring | none; informational | `retry_threshold` | A fuller brief or a stronger model; never a downgrade |
+
+Where an estimate crosses a tokenizer family (Opus 4.7 and later against Sonnet 4.6 and earlier),
+the finding adds a sentence naming the direction of the error and drops one step of confidence.
+Advice only ever names settings that exist: every name is checked against the vendor's
+documentation and recorded with the date, and a test fails the build on any name outside that list.
+
+## Configuration
+
+### Config file
+
+Location, in order of precedence: `$TALLYBOOK_DIR/config.toml`, `$XDG_CONFIG_HOME/tallybook/config.toml`,
+`~/.config/tallybook/config.toml` (on Windows, the user config directory). `tallybook config path`
+prints the resolved location and `tallybook config init` writes an annotated file. Every key is
+optional.
+
+| Key | Type | Default | Effect |
+|---|---|---|---|
+| `plan` | `auto`, `api`, `subscription` | `auto` | How you pay. `api` reports dollars as a bill; `subscription` leads with share. `auto` detects it; see [Plan detection](#plan-detection). |
+| `default_since` | window | `30d` | The window when `--since` is not given. |
+| `db_path` | path | `<config dir>/tallybook.db` | Where the ledger lives. `~` is expanded. |
+| `claude_roots` | list of paths | `~/.claude/projects` | Claude Code transcript directories to scan. |
+| `codex_roots` | list of paths | `~/.codex/sessions`, `~/.codex/archived_sessions` | Codex transcript directories to scan. |
+| `[prices."<model id>"]` | table | built-in | Override or pin a price, with `input`, `cache_read`, `cache_write_5m`, `cache_write_1h`, `output`, each USD per million tokens. |
+
+Under `[findings]`:
+
+| Key | Type | Default | Used by |
+|---|---|---|---|
+| `disabled` | list of ids | `[]` | Rules to skip entirely. |
+| `min_runs` | integer | `3` | Per-agent findings: runs before an agent is reported. |
+| `tool_output_share` | fraction | `0.5` | `tool-output-bloat`: tool output as a share of context. |
+| `min_cache_rebuilds` | integer | `3` | `cache-rebuilt-mid-session`: rebuilds in one session. |
+| `cache_gap_minutes` | integer | `5` | `cache-rebuilt-mid-session`: a pause this long counts as an expiry. |
+| `retry_threshold` | integer | `3` | `retry-loops`: errors from one tool inside six calls. |
+| `thinking_relay_turns` | integer | `20` | `thinking-on-relay`: relay turns with thinking, per agent. |
+| `main_session_turns` | integer | `10` | `main-session-on-strong-model`: a session this short that only read is a look-up. |
+| `long_context_tokens` | integer | `100000` | `long-context-tax`: past this, a turn is mostly carrying history. |
+| `repeat_threshold` | integer | `3` | `repeated-tool-calls`: identical read-only calls before it is a repeat. |
+| `min_saving_usd` | dollars | `1.0` | The smallest monthly saving the default report lists. |
+| `report_limit` | integer | `5` | How many priced findings the default report lists. |
+| `plan_price` | dollars | unset | Your subscription's monthly price; turns on `subscription-break-even`. |
+
+A minimal file:
+
+```toml
+plan = "subscription"
+default_since = "7d"
+
+[findings]
+plan_price = 200
+disabled = ["thinking-on-relay"]
+```
+
+### Environment variables
+
+Environment variables override the config file, and command-line options override both.
+
+| Variable | Effect |
+|---|---|
+| `TALLYBOOK_DIR` | The config directory: config file, database and `sessions.log`. |
+| `TALLYBOOK_DB` | The database path; overrides `db_path`. |
+| `TALLYBOOK_PLAN` | `api` or `subscription`; overrides `plan`. |
+| `TALLYBOOK_CLAUDE_ROOTS` | Claude Code transcript roots, separated by the OS path-list separator; overrides `claude_roots`. |
+| `TALLYBOOK_CODEX_ROOTS` | Codex transcript roots, likewise; overrides `codex_roots`. |
+| `XDG_CONFIG_HOME` | Moves the default config directory to `$XDG_CONFIG_HOME/tallybook`. |
+| `CLAUDE_CONFIG_DIR` | Honoured when computing the default Claude Code root, which becomes `$CLAUDE_CONFIG_DIR/projects`. |
+| `CODEX_HOME` | Honoured when computing the default Codex roots, which become `$CODEX_HOME/sessions` and `archived_sessions`. |
+| `ANTHROPIC_API_KEY` | Its presence makes plan detection choose `api`. The value is never read. |
+
+### Plan detection
+
+With `plan = "auto"`, tallybook chooses `api` when `ANTHROPIC_API_KEY` is set, and otherwise reads
+the non-secret account fields in `~/.claude.json` to see whether Claude Code is logged in with a
+Max or Pro subscription. `tallybook status` shows the decision and the reason. On a subscription,
+dollars are what the usage would have cost on the API, not a bill, and the share column leads;
+`--currency` forces either view for one run.
+
+## MCP server reference
 
 `tallybook-mcp` serves the same ledger over the [Model Context Protocol](https://modelcontextprotocol.io/)
-on stdio, so an agent can ask about its own spend, and about what to change, instead of you running
-the CLI. It ships next to `tallybook` in every release and is built the same way.
+on stdio, so an agent can ask about its own spend and about what to change. It ships next to
+`tallybook` in every release and takes no arguments; `tallybook-mcp --version` prints the version.
+
+### Registering the server
+
+Claude Code:
 
 ```sh
 claude mcp add tallybook -- tallybook-mcp
 ```
 
-Codex and other MCP clients take the same command with no arguments. Once added, ask the agent
-"what have my sub-agents cost this week?" or "is there anything cheaper I should be doing?" and it
-will call the tools itself.
+Codex, in `~/.codex/config.toml`:
 
-| Tool | Returns |
-|---|---|
-| `report` | The window's total, the split by tool and by model, and the findings with their ids |
-| `finding` | One finding in full by id: the four sections, the evidence, the patch |
-| `changes` | Every sub-agent model change with before, after and a verdict |
-| `agents` | Spend per sub-agent type, with the model and effort level it mostly ran at |
-| `sessions` | Sessions by cost or by time |
-| `session` | One session turn by turn, by id or a unique prefix |
-| `prices` | The price table and when it was verified |
-| `refresh` | Rescan transcripts now |
+```toml
+[mcp_servers.tallybook]
+command = "tallybook-mcp"
+```
 
-The window tools (`report`, `finding`, `changes`, `agents`, `sessions`) take `since`, `project`,
-`source` (`claude-code` or `codex`) and `currency`; `session` takes an `id` and `currency`;
-`prices` and `refresh` take nothing. Every tool returns both prose and a structured value with the
-time of the last scan. The server scans once at startup and again when a tool is called more than
-a minute after the last scan, re-reading the config and plan each time. On a subscription the
-structured `currency` is `list_price_equivalent`, not `usd`: the figures are what the usage would
-have cost on the API, not a bill.
+Any other MCP client: run `tallybook-mcp` as a stdio server with no arguments. Configuration comes
+from the same config file and environment variables as the CLI.
 
-It is read-only apart from its own database, makes no network calls, and never returns prompt
-text, tool output or command lines, because the database never holds them.
+### Behaviour
 
-## Privacy
+* Scans the transcript roots once at startup, and again when a tool is called more than 60 seconds
+  after the last scan. The config file and plan are re-read on each scan. `refresh` forces one.
+* Every tool returns both prose, for the model to read, and a structured value, for a client to
+  compute on. Every structured value carries `ingested_at`, `age_seconds` and, when the last scan
+  failed, `scan_error`; the priced ones (all but `prices` and `refresh`) also carry `plan`,
+  `plan_reason` and `currency`.
+* On a subscription the structured `currency` is `list_price_equivalent`, not `usd`.
+* Read-only apart from its own database. It makes no network calls and never returns prompt text,
+  tool output or command lines, because the database never holds them.
+* Tool annotations: every tool is marked read-only and idempotent except `refresh`, which is marked
+  non-destructive and idempotent.
 
-Read-only. Reads the frontmatter of your `.claude/agents` files to check its own advice, never
-their bodies, which are prompts. Stores token counts, tool names, models, effort levels,
-timestamps, project paths and a flag on turns that followed a compaction, in
-`~/.config/tallybook/tallybook.db`. Never stores prompt text, tool output or command lines. No
-network calls.
+### Common inputs
 
-To spot the same tool being called with the same input over and over, the database also holds a
-short hash of each call's input, salted with a random value generated when the database was
-created. The input itself is never written, the salt is never shown, and the hash cannot be turned
-back into a command or a path.
+The window tools (`report`, `finding`, `changes`, `agents`, `sessions`) share these optional
+inputs. They mirror the CLI's global options.
 
-## Documentation
+| Input | Type | Default | Effect |
+|---|---|---|---|
+| `since` | string | `default_since`, `30d` | `7d`, `30d`, `90d`, `all`, or a `YYYY-MM-DD` start date. |
+| `project` | string | every project | Exact match on a project directory, or a prefix when it ends with a path separator. |
+| `source` | string | both | `claude-code` or `codex`. |
+| `currency` | string | detected plan | `usd` or `share`. |
 
-* [`DESIGN.md`](https://github.com/magna-nz/tallybook/blob/main/docs/DESIGN.md) — parsing rules, pricing formula, what is stored.
-* Prices verified 2026-09-10. `tallybook prices` shows the table.
+### Tools
 
-One limitation worth stating: the Codex parser was built from the Codex source and synthetic
-fixtures, and has not yet been run against a real Codex session. The Claude Code side has been
-run against several hundred.
+| Tool | Inputs beyond the common ones | Returns |
+|---|---|---|
+| `report` | `compare` (bool) | `window`, `sessions`, `subagents`, `turns`, `usd`, `main_usd`, `subagent_usd`, `by_source`, `by_model`, `unknown_models`, `cache_hit_rate`, `findings` (id, title, saving_usd, share, confidence, direction), `skipped_files`; with `compare`, a `prior` object with the previous window's `window`, `sessions`, `subagents`, `usd`, `main_usd`, `subagent_usd` and `cache_hit_rate`. `compare` with `since: "all"` is an error. |
+| `finding` | `id` (string, required) | One finding by its stable id: `title`, `saving_usd`, `share`, `confidence`, `direction`, `what_happened`, `why_it_costs`, `what_to_change`, `what_to_expect`, `patch` when there is a file to change, and `evidence` as `columns` and `rows`. |
+| `changes` | `min_runs` (int, default 3), `include_undecided` (bool) | `changes`, each with `agent`, `from`, `to`, `at`, `before` and `after` (`runs`, `avg_usd`, `error_rate`, `avg_turns`), `verdict` and `min_runs`; plus `undecided`, the count held back. |
+| `agents` | | `agents`, each with `agent`, `runs`, `model`, `effort`, `avg_usd`, `read_only_share`, `errors`, `mismatched`. |
+| `sessions` | `sort` (`cost` or `time`), `limit` (int, default 20, `0` for all) | `total` and `sessions`, each with `id`, `source`, `project`, `started_at`, `ended_at`, `turns`, `tool_calls`, `tool_errors`, `usd`, `known`, and for sub-agent runs `agent_type` and `parent_session_id`. |
+| `session` | `id` (string, required; a unique prefix is accepted), `currency` | `id`, `source`, `project`, `agent_type` for a sub-agent run, `started_at`, `ended_at`, `usd`, and `turns`, each with `index`, `time`, `model`, `effort`, `input`, `cache_read`, `cache_write_5m`, `cache_write_1h`, `output`, `thinking`, `text_chars`, `tool_calls`, `usd` and `known`. |
+| `prices` | none | The price table and the date it was verified, including overrides from the config. |
+| `refresh` | none | Rescans now: `scanned`, `ingested`, `unchanged`, `failed`, and `errors`, one message per failed file. |
+
+Finding ids are the same as in the [findings reference](#findings-reference) and are stable across
+versions.
+
+### Calling the tools
+
+Once the server is registered, the agent calls the tools itself. Prompts that map cleanly onto
+them:
+
+* "What have my sub-agents cost this week?" → `agents` with `since: "7d"`.
+* "Is there anything cheaper I should be doing?" → `report`, then `finding` for each id.
+* "Is this week up or down on last week?" → `report` with `since: "7d"` and `compare: true`.
+* "Did moving the implementer to Sonnet actually save money?" → `changes`.
+* "Rescan and show me the most expensive session today." → `refresh`, then `sessions` with
+  `sort: "cost"`.
+
+The same calls as JSON-RPC `tools/call` parameters:
+
+```json
+{ "name": "report",   "arguments": { "since": "7d", "compare": true } }
+{ "name": "finding",  "arguments": { "since": "30d", "id": "long-context-tax" } }
+{ "name": "changes",  "arguments": { "min_runs": 2, "include_undecided": true } }
+{ "name": "sessions", "arguments": { "sort": "cost", "limit": 10, "project": "/home/me/code/myapp/" } }
+{ "name": "session",  "arguments": { "id": "81fd6a4a" } }
+{ "name": "agents",   "arguments": { "source": "claude-code", "currency": "usd" } }
+{ "name": "prices",   "arguments": {} }
+{ "name": "refresh",  "arguments": {} }
+```
+
+## Hooks
+
+`tallybook setup hook` prints a Claude Code `SessionEnd` hook that records each session the moment
+it ends, so the next report is instant, and appends one line per session to
+`<config dir>/sessions.log` with the session's cost, the share of its context that was tool output,
+and its turn count. Claude Code does not show a hook's output, which is why the line goes to a file.
+
+```sh
+tallybook setup hook          # print the JSON block to add to ~/.claude/settings.json
+tallybook setup hook --write  # merge it into the file; refuses to add it twice
+```
+
+The block it adds:
+
+```json
+{
+  "hooks": {
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "tallybook hook session-end" } ] }
+    ]
+  }
+}
+```
+
+`tallybook hook session-end` is the entry point the hook runs. It reads Claude Code's JSON from
+stdin (`session_id`, `transcript_path`, `cwd`, `hook_event_name`, `reason`), records only the
+transcript named, and finishes well inside the 1.5 second budget a `SessionEnd` hook gets. It never
+exits non-zero and never prints on error. Run by hand with nothing on stdin, it prints the summary
+line for the most recent session already in the ledger. The log is capped at 256 KB; past that, the oldest
+half is dropped.
+
+Remove the hook by deleting that entry from the `SessionEnd` list in `settings.json`.
+
+## Privacy and data
+
+The ledger is a SQLite file, `tallybook.db` in the config directory, holding token counts, model
+ids, effort levels, tool names, tool-call classes (read or write), result sizes, timestamps,
+session and project paths, and a flag on each turn that followed a compaction. It never holds
+prompt text, tool output, command lines or sub-agent task briefs.
+
+One column needs explaining. `tool_calls.input_hash` is a 16-character hash of each tool call's
+input, so a rule can see the same call repeated with the same input without the input ever being
+stored. The parser digests the input in memory; the store hashes that digest again with a random
+salt generated when the database was created, and writes the first 16 hex characters. The salt is
+never printed or returned by any query, and two databases hash the same input differently.
+
+Tool results that are images are sized at a fixed 1,600 tokens each, which is roughly what the API
+charges, rather than the length of their base64.
+
+The only files tallybook reads outside its own directory are the transcripts under the configured
+roots, the frontmatter of `.claude/agents/*.md` files (never the body, which is a prompt), the
+non-secret account fields of `~/.claude.json` for plan detection, and, with `setup hook --write`,
+`~/.claude/settings.json`. It makes no network calls.
+
+Parsing rules, the pricing formula and the tokenizer caveat are in
+[`DESIGN.md`](https://github.com/magna-nz/tallybook/blob/main/docs/DESIGN.md). Prices were
+verified 2026-09-10; `tallybook prices` shows the table.
