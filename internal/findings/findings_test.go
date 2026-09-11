@@ -654,7 +654,9 @@ func TestThinkingRelayFires(t *testing.T) {
 	st := newStore(t)
 	relayFixture(t, st, 25)
 
-	f, err := thinkingRelayRule{}.Run(input(t, st))
+	in := input(t, st)
+	in.Agents = agents(t, "reviewer:")
+	f, err := thinkingRelayRule{}.Run(in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -670,7 +672,7 @@ func TestThinkingRelayFires(t *testing.T) {
 	if f.SavingUSD <= 0 {
 		t.Errorf("SavingUSD = %v, want > 0", f.SavingUSD)
 	}
-	if !strings.Contains(f.Patch, ".claude/agents/reviewer.md") {
+	if !strings.Contains(f.Patch, "reviewer.md") {
 		t.Errorf("Patch = %q, want the reviewer file", f.Patch)
 	}
 	if !strings.Contains(f.Patch, "+effort: low") {
@@ -679,7 +681,7 @@ func TestThinkingRelayFires(t *testing.T) {
 	if !strings.Contains(f.WhatToChange, "effort: low") {
 		t.Errorf("WhatToChange = %q, want the exact line to add", f.WhatToChange)
 	}
-	if !strings.Contains(f.WhatToChange, "Leave the main session") {
+	if !strings.Contains(f.WhatToChange, "Leave the agents that do the real work alone") {
 		t.Errorf("WhatToChange = %q, want the do-not-touch note", f.WhatToChange)
 	}
 	if got := len(f.Evidence.Rows); got != 1 {
@@ -695,7 +697,9 @@ func TestThinkingRelayBelowThreshold(t *testing.T) {
 	st := newStore(t)
 	relayFixture(t, st, 19)
 
-	f, err := thinkingRelayRule{}.Run(input(t, st))
+	in := input(t, st)
+	in.Agents = agents(t, "reviewer:")
+	f, err := thinkingRelayRule{}.Run(in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -1043,6 +1047,27 @@ func TestRequestedModelStatesPrecedenceCorrectly(t *testing.T) {
 	}
 	if strings.Contains(f.WhatToChange, "that setting wins over the model") {
 		t.Error("the old, reversed precedence claim is still present")
+	}
+	assertPlainEnglish(t, *f)
+}
+
+// The main session's effort is set by a slash command and a settings key, both
+// of which exist. An earlier version claimed neither did.
+func TestThinkingRelayMainSessionAdviceNamesRealControls(t *testing.T) {
+	st := newStore(t)
+	relayFixture(t, st, 25)
+
+	in := input(t, st)
+	in.Agents = agents(t) // no files: the fixture's agent has none either
+	f, err := thinkingRelayRule{}.Run(in)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if f == nil {
+		t.Skip("fixture produced no finding")
+	}
+	if strings.Contains(f.WhatToChange, "There is no command") {
+		t.Errorf("claims no command exists, but /effort does:\n%s", f.WhatToChange)
 	}
 	assertPlainEnglish(t, *f)
 }

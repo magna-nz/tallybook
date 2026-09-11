@@ -14,6 +14,9 @@ type thinkingRelayRule struct{}
 func (thinkingRelayRule) ID() string { return "thinking-on-relay" }
 
 // relayGroup is one agent type's relay turns that carried thinking.
+// mainSession is the label used for turns that were not a sub-agent run.
+const mainSession = "main session"
+
 type relayGroup struct {
 	agent          string
 	turns          int
@@ -43,7 +46,7 @@ func (thinkingRelayRule) Run(in Input) (*Finding, error) {
 			if row.AgentID != "" {
 				agent = "unnamed agent"
 			} else {
-				agent = "main session"
+				agent = mainSession
 			}
 		}
 		turns, err := in.Store.Turns(row.ID)
@@ -116,12 +119,12 @@ func (thinkingRelayRule) Run(in Input) (*Finding, error) {
 	f.WhyItCosts = "Thinking tokens are billed as output, the most expensive kind. " +
 		"On a turn that only relays a result, they buy nothing."
 
-	f.WhatToChange = relayWhatToChange(groups)
+	f.WhatToChange = relayWhatToChange(in, groups)
 
 	f.WhatToExpect = "Small saving, but it also makes those agents faster: " +
 		"a hand-off turn that does not think comes back sooner."
 
-	f.Patch = relayPatch(groups)
+	f.Patch = relayPatch(in, groups)
 
 	f.Evidence = Table{Columns: []string{"agent", "relay turns with thinking", "thinking tokens", "cost"}}
 	for _, g := range groups {
@@ -132,40 +135,58 @@ func (thinkingRelayRule) Run(in Input) (*Finding, error) {
 	return f, nil
 }
 
-func relayWhatToChange(groups []*relayGroup) string {
+// relayWhatToChange writes the change to make. Sub-agent files take an
+// `effort` key; the main session has a slash command and a settings key.
+//
+// Mechanisms verified 2026-09-11 against code.claude.com/docs/en/sub-agents
+// and code.claude.com/docs/en/model-config.
+func relayWhatToChange(in Input, groups []*relayGroup) string {
 	var parts []string
 	onlyMain := true
 	for _, g := range groups {
-		if g.agent != "main session" {
+		if g.agent != mainSession {
 			onlyMain = false
 		}
 	}
 	for _, g := range groups {
-		if file := agentFile(g.agent); file != "" {
-			parts = append(parts, fmt.Sprintf("In %s add:\n\n    effort: low\n", file))
-			continue
+		switch {
+		case g.agent == mainSession:
+			parts = append(parts, "For the main session, `/effort low` sets it for the rest of the session, "+
+				"and `effortLevel` in ~/.claude/settings.json sets the default for new ones. Both are worth "+
+				"thinking twice about: the main session is usually where the thinking earns its keep.")
+
+		default:
+			if def, ok := in.Agents.Lookup(g.agent); ok {
+				parts = append(parts, fmt.Sprintf(
+					"In %s add this line to the block at the top:\n\n    effort: low\n", def.Path))
+				continue
+			}
+			if file := agentFile(g.agent); file != "" {
+				parts = append(parts, fmt.Sprintf(
+					"There is no %s yet. Create it with an `effort: low` line, or pass a lower effort where "+
+						"the agent is launched.", file))
+				continue
+			}
+			parts = append(parts, fmt.Sprintf(
+				"%s is built into the harness and has no file of its own, so lower the effort where you "+
+					"launch it rather than in a file.", g.agent))
 		}
-		if g.agent == "main session" {
-			parts = append(parts, "There is no command that turns the main session's thinking down mid-"+
-				"conversation. That level is set in your Claude Code settings, and it is usually worth "+
-				"leaving where it is.")
-			continue
-		}
-		parts = append(parts, fmt.Sprintf(
-			"%s has no file of its own, so pass a lower effort where you launch it rather than in a file.", g.agent))
 	}
 	if !onlyMain {
-		parts = append(parts, "Leave the main session and implementers alone. "+
-			"They are where the thinking earns its keep.")
+		parts = append(parts, "The key takes low, medium, high, xhigh or max. Leave the agents that do the "+
+			"real work alone; this is for the ones that mostly pass results along.")
 	}
-	return strings.TrimRight(strings.Join(parts, "\n"), "\n")
+	return strings.TrimRight(strings.Join(parts, "\n\n"), "\n")
 }
 
-func relayPatch(groups []*relayGroup) string {
+func relayPatch(in Input, groups []*relayGroup) string {
 	var b strings.Builder
 	for _, g := range groups {
-		if file := agentFile(g.agent); file != "" {
-			b.WriteString(frontmatterPatch(file, "effort: low"))
+		if g.agent == mainSession {
+			continue // not a file change
+		}
+		if def, ok := in.Agents.Lookup(g.agent); ok {
+			b.WriteString(frontmatterPatch(def.Path, "effort: low"))
 		}
 	}
 	return b.String()
