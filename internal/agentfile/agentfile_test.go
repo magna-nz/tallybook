@@ -17,7 +17,9 @@ func write(t *testing.T, dir, name, body string) {
 }
 
 func TestParseFrontmatter(t *testing.T) {
-	t.Setenv("HOME", t.TempDir()) // never read the developer's own agent files
+	fakeHome := t.TempDir() // never read the developer's own agent files
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("USERPROFILE", fakeHome) // os.UserHomeDir reads this on Windows
 	root := t.TempDir()
 	dir := filepath.Join(root, ".claude", "agents")
 	write(t, dir, "researcher.md", "---\nname: researcher\ndescription: reads things\ntools: Read, Grep, Glob\nmodel: sonnet\n---\n\nYou are a researcher. This body is prompt text and must not be read.\n")
@@ -61,6 +63,7 @@ func TestParseFrontmatter(t *testing.T) {
 func TestProjectShadowsUser(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	write(t, filepath.Join(home, ".claude", "agents"), "researcher.md", "---\nname: researcher\nmodel: opus\n---\n")
 
 	root := t.TempDir()
@@ -76,7 +79,9 @@ func TestProjectShadowsUser(t *testing.T) {
 }
 
 func TestMissingDirectoriesAreNotAnError(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("USERPROFILE", fakeHome) // os.UserHomeDir reads this on Windows
 	set := Load(filepath.Join(t.TempDir(), "nope"), "")
 	if len(set) != 0 {
 		t.Errorf("expected an empty set, got %v", set)
