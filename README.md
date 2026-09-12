@@ -7,6 +7,7 @@
     <a href="https://github.com/magna-nz/tallybook/releases/latest"><img src="https://img.shields.io/github/v/release/magna-nz/tallybook?sort=semver&label=release" alt="Latest release" /></a>
     <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-server-005FBA" alt="MCP server" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
+    <a href="https://glama.ai/mcp/servers/magna-nz/tallybook"><img src="https://glama.ai/mcp/servers/magna-nz/tallybook/badges/score.svg?v=2" alt="Glama Quality" /></a>
   </p>
   <p><a href="https://magna-nz.github.io/tallybook/">Documentation</a></p>
 </div>
