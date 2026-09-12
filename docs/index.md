@@ -282,6 +282,10 @@ way the MCP server does: on the first request, and again when a request arrives 
 seconds after the last scan. *Rescan* forces one. With `--no-ingest` nothing scans until you press
 it, so the page reports the ledger as it stands.
 
+The page ships three palettes, picked in the scope bar and remembered by the browser: **Embigo**,
+the default, a warm-neutral dark surface with an indigo-to-violet accent shared with ShipPromptly;
+and the page's own **Ledger light** and **Ledger dark**.
+
 ### What it exposes
 
 The server binds to `127.0.0.1` only and has no authentication: anyone with a shell on the machine

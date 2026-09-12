@@ -391,15 +391,31 @@ func TestUIHookButtonWritesOnlyTheFakeHome(t *testing.T) {
 	}
 }
 
-func TestUIThemeToggleStampsTheDocument(t *testing.T) {
+func TestUIThemePickerStampsTheDocument(t *testing.T) {
 	ctx, url := browser(t)
 	open(t, ctx, url, "report")
-	click(t, ctx, "#f-theme")
 	var theme string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`document.documentElement.getAttribute('data-theme') || ''`, &theme)); err != nil {
 		t.Fatalf("theme: %v", err)
 	}
-	if theme != "dark" && theme != "light" {
-		t.Fatalf("data-theme = %q after toggling, want dark or light", theme)
+	if theme != "embigo" {
+		t.Fatalf("default data-theme = %q, want embigo", theme)
+	}
+	if err := chromedp.Run(ctx, chromedp.SetValue("#f-theme", "light", chromedp.ByQuery), chromedp.Sleep(50*time.Millisecond)); err != nil {
+		t.Fatalf("pick light: %v", err)
+	}
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`document.documentElement.getAttribute('data-theme') || ''`, &theme)); err != nil {
+		t.Fatalf("theme: %v", err)
+	}
+	if theme != "light" {
+		t.Fatalf("data-theme = %q after picking Ledger light", theme)
+	}
+	// The choice survives a reload.
+	open(t, ctx, url, "report")
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`document.documentElement.getAttribute('data-theme') || ''`, &theme)); err != nil {
+		t.Fatalf("theme: %v", err)
+	}
+	if theme != "light" {
+		t.Fatalf("data-theme = %q after reload, want the remembered light", theme)
 	}
 }

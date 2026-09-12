@@ -3,41 +3,54 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="dark light">
 <title>Tallybook</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Crect x='2' y='2' width='22' height='22' rx='4' fill='%231d6b59'/%3E%3Cpath d='M7 8h12M7 13h12M7 18h7' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Crect x='2' y='2' width='22' height='22' rx='4' fill='%236b4fa8'/%3E%3Cpath d='M7 8h12M7 13h12M7 18h7' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
+/* Three palettes over one set of token names. Embigo is the default, the bare
+   :root: ShipPromptly's warm-neutral surface ramp (paper under a lamp rather
+   than a screen in a dark room) with its indigo-to-violet brand, every value
+   taken from forgehub-pro's index.css. Ledger light and Ledger dark are the
+   page's own earlier palettes, attribute-scoped. A picker in the scope bar
+   sets data-theme and the browser remembers it. */
 :root {
+  color-scheme: dark;
+  --bg: #1e1d1b; --surface: #262523; --surface-2: #302e2b; --surface-3: #3a3835;
+  --line: #3a3733; --line-strong: #55504a;
+  --ink: #f2efe9; --ink-2: #a29c91; --ink-3: #7b756a;
+  --accent: #9a8ad4; --accent-ink: #ffffff; --accent-line: #6b4fa8;
+  --accent-soft: linear-gradient(135deg, rgba(95, 99, 196, 0.16), rgba(107, 79, 168, 0.16));
+  --brand: linear-gradient(135deg, #5f63c4 0%, #6b4fa8 100%);
+  --brand-shadow: 0 5px 18px rgba(107, 79, 168, 0.28);
+  --mark: #6b4fa8;
+  --s1: #8195cf; --s2: #d98aa5;
+  --seq-1: #34355c; --seq-4: #8195cf;
+  --good: #89c360; --good-soft: rgba(137, 195, 96, 0.16);
+  --warn: #f1ae27; --warn-soft: rgba(241, 174, 39, 0.16);
+  --crit: #e75140; --crit-soft: rgba(231, 81, 64, 0.16);
+  --code-bg: #191817;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-theme="light"] {
   color-scheme: light;
   --bg: #f3f5f4; --surface: #ffffff; --surface-2: #e9edeb; --surface-3: #dfe5e2;
   --line: #d5dbd8; --line-strong: #b9c2bd;
   --ink: #16201c; --ink-2: #4d5a55; --ink-3: #78847f;
-  --accent: #1d6b59; --accent-ink: #ffffff; --accent-soft: #dcefe8; --accent-line: #a9d3c5;
+  --accent: #1d6b59; --accent-ink: #ffffff; --accent-line: #a9d3c5; --accent-soft: #dcefe8;
+  --brand: #1d6b59; --brand-shadow: none; --mark: #1d6b59;
   --s1: #2a78d6; --s2: #eb6834;
   --seq-1: #cde2fb; --seq-4: #3987e5;
   --good: #0ca30c; --good-soft: #e3f4e3; --warn: #9a6b00; --warn-soft: #fbf0d2; --crit: #d03b3b; --crit-soft: #fbe3e3;
   --code-bg: #eef2f0;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #141917; --surface: #1b211e; --surface-2: #232b27; --surface-3: #2c3630;
-    --line: #2f3934; --line-strong: #46534d;
-    --ink: #eef2f0; --ink-2: #b3bdb8; --ink-3: #7f8a85;
-    --accent: #3fa88f; --accent-ink: #0e1a16; --accent-soft: #1f3a32; --accent-line: #2f5f52;
-    --s1: #3987e5; --s2: #d95926; --seq-1: #184f95; --seq-4: #3987e5;
-    --good: #2fbf2f; --good-soft: #1b2e1b; --warn: #fab219; --warn-soft: #3a2f10; --crit: #e66767; --crit-soft: #3a1f1f;
-    --code-bg: #101512;
-  }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #141917; --surface: #1b211e; --surface-2: #232b27; --surface-3: #2c3630;
   --line: #2f3934; --line-strong: #46534d;
   --ink: #eef2f0; --ink-2: #b3bdb8; --ink-3: #7f8a85;
-  --accent: #3fa88f; --accent-ink: #0e1a16; --accent-soft: #1f3a32; --accent-line: #2f5f52;
+  --accent: #3fa88f; --accent-ink: #0e1a16; --accent-line: #2f5f52; --accent-soft: #1f3a32;
+  --brand: #3fa88f; --brand-shadow: none; --mark: #3fa88f;
   --s1: #3987e5; --s2: #d95926; --seq-1: #184f95; --seq-4: #3987e5;
   --good: #2fbf2f; --good-soft: #1b2e1b; --warn: #fab219; --warn-soft: #3a2f10; --crit: #e66767; --crit-soft: #3a1f1f;
   --code-bg: #101512;
@@ -60,6 +73,7 @@ p { margin: 0; }
 .rail { background: var(--surface); border-right: 1px solid var(--line); padding: 18px 12px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 0; height: 100vh; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
 .brand svg { width: 26px; height: 26px; flex: none; }
+.brand svg rect { fill: var(--mark); }
 .brand b { font-weight: 600; font-size: 15px; }
 .brand small { display: block; color: var(--ink-3); font-size: 11px; font-family: var(--mono); }
 .nav { display: flex; flex-direction: column; gap: 2px; }
@@ -84,7 +98,7 @@ p { margin: 0; }
 .btn { background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; padding: 4px 10px; font-size: 13px; cursor: pointer; color: var(--ink); }
 .btn:hover { background: var(--surface-2); }
 .btn:disabled { opacity: .5; cursor: default; }
-.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary { background: var(--brand); color: var(--accent-ink); border-color: transparent; box-shadow: var(--brand-shadow); }
 .btn.small { padding: 2px 8px; font-size: 12px; }
 
 .view { padding: 22px 24px 60px; max-width: 1180px; width: 100%; }
@@ -192,7 +206,7 @@ pre.json { max-height: 70vh; overflow: auto; }
 <div class="app">
   <aside class="rail">
     <div class="brand">
-      <svg viewBox="0 0 26 26" aria-hidden="true"><rect x="2" y="2" width="22" height="22" rx="4" fill="var(--accent)"/><path d="M7 8h12M7 13h12M7 18h7" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg viewBox="0 0 26 26" aria-hidden="true"><rect x="2" y="2" width="22" height="22" rx="4"/><path d="M7 8h12M7 13h12M7 18h7" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg>
       <div><b>Tallybook</b><small id="brand-host"></small></div>
     </div>
     <nav class="nav" id="nav">
@@ -275,6 +289,14 @@ async function post(path) {
   return api(path, null, { method: 'POST', headers: { 'X-Tallybook-Request': '1' } });
 }
 
+/* ---- theme ---- */
+const THEMES = ['embigo', 'light', 'dark'];
+// The bare :root is Embigo, so the default is written out explicitly rather
+// than by removing the attribute: an attribute that is always present can be
+// read back by a test or a person with dev tools open.
+function theme() { const t = document.documentElement.getAttribute('data-theme'); return THEMES.includes(t) ? t : 'embigo'; }
+function setTheme(t) { if (!THEMES.includes(t)) t = 'embigo'; document.documentElement.setAttribute('data-theme', t); try { localStorage.setItem('tb-theme', t); } catch (e) {} }
+
 /* ---- scope bar ---- */
 function renderScope() {
   const el = document.getElementById('scope');
@@ -313,7 +335,7 @@ function renderScope() {
     <div class="fresh">
       <span id="fresh-text">${freshText()}</span>
       <button class="btn small" id="f-refresh">Rescan</button>
-      <button class="btn small" id="f-theme" title="Toggle light/dark">◐</button>
+      <select id="f-theme" title="Theme">${[['embigo', 'Embigo'], ['light', 'Ledger light'], ['dark', 'Ledger dark']].map(([v, l]) => `<option value="${v}" ${theme() === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
     </div>`;
   el.querySelector('#f-since').onchange = e => { if (e.target.value === 'date') { el.querySelector('#f-date').hidden = false; el.querySelector('#f-date').focus(); return; } S.since = e.target.value; render(); };
   el.querySelector('#f-date').onchange = e => { if (e.target.value) { S.since = e.target.value; render(); } };
@@ -321,7 +343,7 @@ function renderScope() {
   el.querySelectorAll('#f-source button').forEach(b => b.onclick = () => { S.source = b.dataset.v; render(); });
   el.querySelectorAll('#f-currency button').forEach(b => b.onclick = () => { S.currency = b.dataset.v; render(); });
   el.querySelector('#f-refresh').onclick = refresh;
-  el.querySelector('#f-theme').onclick = () => { const r = document.documentElement; const cur = r.getAttribute('data-theme'); const dark = cur ? cur === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; r.setAttribute('data-theme', dark ? 'light' : 'dark'); try { localStorage.setItem('tb-theme', dark ? 'light' : 'dark'); } catch (e) {} };
+  el.querySelector('#f-theme').onchange = e => setTheme(e.target.value);
 }
 function freshText() {
   if (!fresh) return '<span class="dot"></span>Not scanned yet';
@@ -675,7 +697,8 @@ let toastT; function toast(msg) { const t = document.getElementById('toast'); t.
 addEventListener('hashchange', render);
 
 (async function boot() {
-  try { const th = localStorage.getItem('tb-theme'); if (th) document.documentElement.setAttribute('data-theme', th); } catch (e) {}
+  let stored = null; try { stored = localStorage.getItem('tb-theme'); } catch (e) {}
+  setTheme(stored || 'embigo');
   document.getElementById('brand-host').textContent = location.host;
   try {
     const st = await api('status');
