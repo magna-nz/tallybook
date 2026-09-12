@@ -45,7 +45,7 @@ func Session(w io.Writer, id string, source model.Source, turns []model.Turn, co
 
 	var prevContext int64
 	for i, t := range turns {
-		note := turnNote(t, prevContext)
+		note := TurnNote(t, prevContext)
 		fmt.Fprintf(bw, "%-6d%-9s%-18s%10d%10d%10d  %s\n",
 			i+1, t.Timestamp.Format("15:04:05"), truncate(t.Model, 18),
 			t.Usage.Input, t.Usage.CacheRead, t.Usage.Output, note)
@@ -63,11 +63,13 @@ func Session(w io.Writer, id string, source model.Source, turns []model.Turn, co
 	return bw.Flush()
 }
 
-// turnNote reports "compacted" when the conversation was compacted just
+// TurnNote reports "compacted" when the conversation was compacted just
 // before this turn, else "cache rebuilt" when this turn's cache writes exceed
 // half of the previous turn's context size. Compaction wins because it is the
-// reason for the rebuild that follows it.
-func turnNote(t model.Turn, prevContext int64) string {
+// reason for the rebuild that follows it. It is exported because the query
+// package labels turns for the MCP server and the web UI with the same rule,
+// so the CLI and the page can never disagree about which turn rebuilt.
+func TurnNote(t model.Turn, prevContext int64) string {
 	if t.CompactionBefore {
 		return "compacted"
 	}

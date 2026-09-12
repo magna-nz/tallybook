@@ -14,6 +14,7 @@ type Filter struct {
 	Since, Until time.Time // on session StartedAt
 	Project      string    // exact match on Session.Project, or prefix match if it ends with "/"
 	Source       model.Source
+	Parent       string // exact match on ParentSessionID: the runs one session launched
 }
 
 // whereClause returns the SQL WHERE conditions (joined with AND, no leading
@@ -48,6 +49,10 @@ func (f Filter) whereClause() (string, []interface{}) {
 	if f.Source != "" {
 		conds = append(conds, "source = ?")
 		args = append(args, string(f.Source))
+	}
+	if f.Parent != "" {
+		conds = append(conds, "parent_session_id = ?")
+		args = append(args, f.Parent)
 	}
 
 	return strings.Join(conds, " AND "), args

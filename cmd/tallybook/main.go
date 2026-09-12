@@ -40,6 +40,9 @@ and what would have been cheaper. Nothing leaves your machine.`,
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if flags.serve {
+				return runServe(cmd, flags)
+			}
 			return runReport(cmd, flags)
 		},
 	}
@@ -54,6 +57,9 @@ and what would have been cheaper. Nothing leaves your machine.`,
 	root.PersistentFlags().BoolVar(&flags.claude, "claude", false, "only Claude Code sessions (default: every source)")
 	root.PersistentFlags().BoolVar(&flags.codex, "codex", false, "only Codex CLI sessions (default: every source)")
 	root.Flags().BoolVar(&flags.compare, "compare", false, "also show the window before this one, and how spend moved")
+	root.Flags().BoolVar(&flags.serve, "serve", false, "serve the web UI on 127.0.0.1 instead of printing a report; the page's own controls replace --since, --project, --claude/--codex, --currency and --json, which are ignored")
+	root.Flags().IntVar(&flags.port, "port", defaultServePort, "port for --serve; 0 picks a free one")
+	root.Flags().BoolVar(&flags.open, "open", false, "with --serve, open the page in your default browser")
 
 	root.AddCommand(newReportCmd(flags))
 	root.AddCommand(newFindingCmd(flags))

@@ -13,69 +13,21 @@
 
 <br />
 
-No proxy, no API key, nothing leaves your machine. Run it as a CLI, or add `tallybook-mcp` to
-Claude Code or Codex and ask the agent itself what it's spending and what would be cheaper.
+No proxy, no API key, nothing leaves your machine. Run it as a CLI, open the same report in your
+browser with `tallybook --serve`, or add `tallybook-mcp` to Claude Code or Codex and ask the agent
+itself what it's spending and what would be cheaper.
 
-```
-$ tallybook
+<div align="center">
+  <img src="docs/web-ui.gif" alt="tallybook --serve: the same report in your browser" width="820" />
+  <br />
+  <sub><strong>In your browser</strong> · <code>tallybook --serve</code></sub>
+  <br /><br />
+  <img src="docs/cli.gif" alt="tallybook in the terminal: the report, a week-on-week comparison, and spend by sub-agent" width="820" />
+  <br />
+  <sub><strong>In your terminal</strong> · <code>tallybook</code></sub>
+</div>
 
-Scanned 137 sessions, 96 sub-agent runs (Aug 20 – Sep 11)
-
-Last 30 days                     share list-price equiv.
-  Total                           100%         $1,296.73
-  Main session turns               86%         $1,120.68
-  Sub-agents                       14%           $176.05
-  Cache hit rate                   99%
-
-Top findings (estimated saving / month)
-
- 1.     20%   Long sessions pay to carry their own history
-              27 sessions in the last 30 days grew past 100,000 tokens of conversation.
- 2.      2%   Thinking was spent on turns that did no thinking
-              On 2,947 turns in the last 30 days, the model spent thinking tokens and then did no…
- 3.      1%   Your saved context was rebuilt mid-session
-              In 3 sessions in the last 30 days, the conversation so far was re-sent and charged…
- 4.      1%   An hour of cache lifetime went unused
-              In 46 sessions in the last 30 days, most of the cache writes were made with the hou…
- 5.      1%   Identical tool calls were repeated
-              In 9 sessions in the last 30 days, a read-only tool was called with the same input…
-
-Also worth knowing
-
- 8. 8 sessions look under-powered
- 9. Your plan is paying for itself
-
-2 more findings. Run `tallybook findings` to see them all.
-
-Run `tallybook finding <n>` for evidence and the change to make.
-Savings are estimated one finding at a time. Where two touch the same runs
-they overlap, so they do not add up.
-
-You are on a subscription: dollars are what this usage would cost on the API, not what you paid.
-Share is the number to watch.
-```
-
-And this week against last week:
-
-```
-$ tallybook --since 7d --compare
-
-Scanned 9 sessions, 34 sub-agent runs (Sep 8 – Sep 11)
-
-Last 7 days                      share list-price equiv.
-  Total                           100%           $235.47
-  Main session turns               81%           $191.78
-  Sub-agents                       19%            $43.68
-  Cache hit rate                   98%
-
-Compared with the 7 days before (Aug 28 – Sep 4)
-  Total               down 36%        $367.47 before, $235.47 now
-  Main session turns  down 43%        $339.02 before, $191.78 now
-  Sub-agents          up 54%          $28.45 before, $43.68 now
-  Sessions            down 40%        15 before, 9 now
-  Sub-agent runs      up 278%         9 before, 34 now
-  Cache hit rate      about the same  99% before, 98% now
-```
+<br />
 
 More in the [documentation](https://magna-nz.github.io/tallybook/).
 
@@ -107,6 +59,7 @@ command = "tallybook-mcp"
 
 ```sh
 tallybook                         # this period's report: the five biggest findings
+tallybook --serve                 # the same report, findings and sessions in your browser, on localhost
 tallybook findings                # every finding, grouped by what kind of change it asks for
 tallybook --since 7d --compare    # this week against last week: spend, sessions, cache hit rate
 tallybook finding 1               # finding #1 in full: what happened, why, what to change

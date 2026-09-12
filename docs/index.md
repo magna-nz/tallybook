@@ -5,8 +5,8 @@ title: Tallybook
 # Tallybook
 
 Tallybook prices every Claude Code and Codex session on your disk, shows what each agent cost over
-any period, and says in plain English what would have been cheaper. It is a command-line tool and
-an MCP server. Nothing leaves your machine.
+any period, and says in plain English what would have been cheaper. It is a command-line tool, a
+local web page (`tallybook --serve`) and an MCP server. Nothing leaves your machine.
 
 [Repository](https://github.com/magna-nz/tallybook) ·
 [Releases](https://github.com/magna-nz/tallybook/releases/latest) ·
@@ -23,6 +23,7 @@ an MCP server. Nothing leaves your machine.
   * [Commands](#commands)
   * [Exit codes](#exit-codes)
 * [Reading a report](#reading-a-report)
+* [Web UI](#web-ui)
 * [Findings reference](#findings-reference)
 * [Configuration](#configuration)
   * [Config file](#config-file)
@@ -136,6 +137,9 @@ With no command, `tallybook` runs `report`. Every command honours the global opt
 | `--no-ingest` | | | Do not scan for new or changed transcripts; report from the ledger as it stands. |
 | `--db` | path | `db_path` from config | The ledger database to use. |
 | `--compare` | | | Report only: also show the window of the same length before this one, and how each figure moved. Refused with `--since all`. |
+| `--serve` | | | Instead of printing the report, serve it as a web page on localhost and keep running until Ctrl-C. See [Web UI](#web-ui). Honours `--db` and `--no-ingest`; the page's own controls replace the other options. |
+| `--port` | number | `7477` | With `--serve`: the port to listen on. `0` picks a free one. |
+| `--open` | | | With `--serve`: open the page in your default browser once it is listening. |
 | `-v`, `--version` | | | Print the version and exit. |
 | `-h`, `--help` | | | Help for the command. |
 
@@ -246,6 +250,57 @@ grouped by the kind of change each asks for. Both number findings by their posit
 list, so `tallybook finding <n>` means the same thing from either, and the printed numbers may
 skip. Savings are estimated one finding at a time; two that touch the same runs overlap and do not
 add up.
+
+## Web UI
+
+```sh
+tallybook --serve          # http://127.0.0.1:7477
+tallybook --serve --open   # and open it in your browser
+```
+
+`--serve` serves the report as a single web page from the `tallybook` binary itself. It is the same
+ledger, the same rules and the same numbers as the CLI and the MCP server; the page is a different
+way to read them, with a scope bar in place of the global options. Every screen names the CLI
+command it mirrors and has a JSON view of the response behind it.
+
+| Screen | Mirrors | Shows |
+|---|---|---|
+| Overview | `tallybook`, `--compare` | The totals, cache hit rate, spend by day (from the sessions list), by model and by source, and the top findings. Tick *Compare* for the window before. |
+| Findings | `findings` | Every finding, grouped by the change it asks for, numbered as in the report. |
+| Finding | `finding <n> --evidence` | The four sections, the evidence table with links into sessions, and the patch with a copy button. Tallybook never applies the patch. |
+| Sub-agents | `agents` | The per-agent table, with read-only-on-a-strong-model and high error counts highlighted. |
+| Sessions | `sessions --sort --limit` | The session table with sub-agent runs as their own rows, linked to their parent. |
+| Session | `session <id>` | Turn by turn, plus a chart of the context carried per turn marking compactions, cache rebuilds and sub-agent launches, and the runs the session launched. |
+| Model changes | `changes --min-runs --all` | One card per change with the before and after runs and the verdict. |
+| Status | `status` | Database, transcript roots, the last scan and its errors, plan detection, and a Rescan button. |
+| Prices | `prices` | The price table, with config overrides marked. |
+| Config & hook | `config path`, `setup hook --write` | The resolved config and where each value came from, which environment variables are set (never their values), and a button that installs the `SessionEnd` hook. |
+
+The scope bar carries the window, project, source and currency, exactly like `--since`,
+`--project`, `--claude`/`--codex` and `--currency`. The page rescans the transcript roots the same
+way the MCP server does: on the first request, and again when a request arrives more than 60
+seconds after the last scan. *Rescan* forces one. With `--no-ingest` nothing scans until you press
+it, so the page reports the ledger as it stands.
+
+The page ships three palettes, picked in the scope bar and remembered by the browser: **Embigo**,
+the default, a warm-neutral dark surface with an indigo-to-violet accent shared with ShipPromptly;
+and the page's own **Ledger light** and **Ledger dark**.
+
+### What it exposes
+
+The server binds to `127.0.0.1` only and has no authentication: anyone with a shell on the machine
+can read it, which is the same trust the ledger file already has. It rejects requests whose `Host`
+header is not `localhost`, `127.0.0.1` or `[::1]`, so a web page you visit cannot reach it through
+DNS rebinding, and the two requests that write (`POST /api/refresh`, `POST /api/hook`) require a
+request header only the page sets, so a form on another site cannot trigger them.
+
+The JSON routes under `/api/` return the MCP tools' structured values with the same field names,
+plus `/api/status` and `/api/config` for the two setup screens. They are for the page, not a
+stable API; the MCP server is the interface for other programs.
+
+Like every other command it is read-only apart from its own database, and the hook button writes
+only the block `tallybook setup hook` prints, to `~/.claude/settings.json`, refusing to add it
+twice.
 
 ## Findings reference
 
@@ -487,8 +542,9 @@ charges, rather than the length of their base64.
 
 The only files tallybook reads outside its own directory are the transcripts under the configured
 roots, the frontmatter of `.claude/agents/*.md` files (never the body, which is a prompt), the
-non-secret account fields of `~/.claude.json` for plan detection, and, with `setup hook --write`,
-`~/.claude/settings.json`. It makes no network calls.
+non-secret account fields of `~/.claude.json` for plan detection, and, with `setup hook --write` or
+the hook button in the web UI, `~/.claude/settings.json`. It makes no network calls; `--serve`
+listens on the loopback interface only and never connects outward.
 
 Parsing rules, the pricing formula and the tokenizer caveat are in
 [`DESIGN.md`](https://github.com/magna-nz/tallybook/blob/main/docs/DESIGN.md). Prices were

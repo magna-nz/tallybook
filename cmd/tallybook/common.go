@@ -36,6 +36,9 @@ type globalFlags struct {
 	claude   bool // scope to Claude Code sessions
 	codex    bool // scope to Codex sessions
 	compare  bool // report only: show the window before this one alongside
+	serve    bool // root only: run the web UI instead of printing a report
+	port     int  // --serve's port; 0 picks a free one
+	open     bool // --serve: open the page in the default browser
 }
 
 // source turns the --claude/--codex pair into a filter value. Both or
