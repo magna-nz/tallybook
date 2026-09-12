@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/magna-nz/tallybook/internal/model"
-	"strings"
+	"errors"
 
+	"github.com/magna-nz/tallybook/internal/model"
+	"github.com/magna-nz/tallybook/internal/query"
 	"github.com/magna-nz/tallybook/internal/report"
-	"github.com/magna-nz/tallybook/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -27,8 +27,14 @@ func runSession(cmd *cobra.Command, flags *globalFlags, idOrPrefix string) error
 	}
 	defer ctx.close()
 
-	id, err := resolveSessionID(ctx.st, idOrPrefix)
+	// The resolver is shared with the MCP server and the web UI, so every
+	// surface names the same session for the same prefix. Its input errors
+	// are usage errors here, as they always were.
+	id, err := query.ResolveSessionID(ctx.st, idOrPrefix)
 	if err != nil {
+		if errors.Is(err, query.ErrBadInput) || errors.Is(err, query.ErrNotFound) || errors.Is(err, query.ErrAmbiguous) {
+			return usageError{err}
+		}
 		return err
 	}
 
@@ -55,36 +61,4 @@ func runSession(cmd *cobra.Command, flags *globalFlags, idOrPrefix string) error
 		return report.SessionJSON(out, id, turns, usd)
 	}
 	return report.Session(out, id, source, turns, usd)
-}
-
-// resolveSessionID finds the session with an exact id match, or the unique
-// session whose id starts with idOrPrefix. Ambiguous prefixes and unknown
-// ids are usage errors.
-func resolveSessionID(st *store.Store, idOrPrefix string) (string, error) {
-	if s, err := st.Session(idOrPrefix); err != nil {
-		return "", err
-	} else if s != nil {
-		return s.ID, nil
-	}
-
-	rows, err := st.Sessions(store.Filter{})
-	if err != nil {
-		return "", err
-	}
-
-	var matches []string
-	for _, r := range rows {
-		if strings.HasPrefix(r.ID, idOrPrefix) {
-			matches = append(matches, r.ID)
-		}
-	}
-
-	switch len(matches) {
-	case 0:
-		return "", usageErrorf("no session matches %q", idOrPrefix)
-	case 1:
-		return matches[0], nil
-	default:
-		return "", usageErrorf("%q is ambiguous, matches: %s", idOrPrefix, strings.Join(matches, ", "))
-	}
 }

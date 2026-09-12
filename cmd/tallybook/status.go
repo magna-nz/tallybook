@@ -44,7 +44,11 @@ func runStatus(cmd *cobra.Command, flags *globalFlags) error {
 		}
 	}
 
-	claudeCount, codexCount := sourceCounts(ctx.st)
+	rows, err := ctx.st.Sessions(store.Filter{})
+	if err != nil {
+		return err
+	}
+	claudeCount, codexCount := sourceCounts(rows)
 
 	data := report.StatusData{
 		DBPath:      ctx.cfg.DBPath,
@@ -68,11 +72,7 @@ func runStatus(cmd *cobra.Command, flags *globalFlags) error {
 }
 
 // sourceCounts returns how many ingested sessions came from each source.
-func sourceCounts(st *store.Store) (claudeCount, codexCount int) {
-	rows, err := st.Sessions(store.Filter{})
-	if err != nil {
-		return 0, 0
-	}
+func sourceCounts(rows []store.SessionRow) (claudeCount, codexCount int) {
 	for _, r := range rows {
 		switch r.Source {
 		case "claude-code":

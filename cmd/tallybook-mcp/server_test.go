@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/magna-nz/tallybook/internal/ledger"
+	"github.com/magna-nz/tallybook/internal/query"
 	"github.com/magna-nz/tallybook/internal/report"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -80,14 +81,14 @@ func e2eEnv(t *testing.T) {
 // it, closed on cleanup. e2eEnv forces TALLYBOOK_PLAN=api; a test that needs
 // another plan calls e2eEnv, overrides the variable, and calls newApp
 // itself.
-func newTestApp(t *testing.T) *app {
+func newTestApp(t *testing.T) *query.App {
 	t.Helper()
 	e2eEnv(t)
 	a, err := newApp()
 	if err != nil {
 		t.Fatalf("newApp: %v", err)
 	}
-	t.Cleanup(a.close)
+	t.Cleanup(a.Close)
 	return a
 }
 
@@ -106,7 +107,7 @@ func callTool(t *testing.T, cs *mcp.ClientSession, name string, args map[string]
 }
 
 // decode marshals a tool result's structured content and unmarshals it into
-// T, the Out struct the tool declares in tools.go.
+// T, the Out struct the query package declares for that tool.
 func decode[T any](t *testing.T, res *mcp.CallToolResult) T {
 	t.Helper()
 	var out T
@@ -134,7 +135,7 @@ func resultText(res *mcp.CallToolResult) string {
 // newTestSession wires an in-memory client/server pair against a and
 // returns the connected client session plus a cleanup-free close func. Both
 // sessions are closed via t.Cleanup.
-func newTestSession(t *testing.T, a *app) *mcp.ClientSession {
+func newTestSession(t *testing.T, a *query.App) *mcp.ClientSession {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -218,7 +219,7 @@ func TestReportPositiveTotal(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("report returned IsError, text: %s", resultText(res))
 	}
-	out := decode[ReportOut](t, res)
+	out := decode[query.ReportOut](t, res)
 	if out.USD <= 0 {
 		t.Errorf("USD = %v, want > 0", out.USD)
 	}
@@ -266,14 +267,14 @@ func TestSubscriptionLabelsMoney(t *testing.T) {
 		if err != nil {
 			t.Fatalf("newApp: %v", err)
 		}
-		t.Cleanup(a.close)
+		t.Cleanup(a.Close)
 		cs := newTestSession(t, a)
 
 		res := callTool(t, cs, "report", map[string]any{"since": "all"})
 		if res.IsError {
 			t.Fatalf("report returned IsError, text: %s", resultText(res))
 		}
-		out := decode[ReportOut](t, res)
+		out := decode[query.ReportOut](t, res)
 		if out.Currency != "list_price_equivalent" {
 			t.Errorf("Currency = %q, want list_price_equivalent", out.Currency)
 		}
@@ -297,7 +298,7 @@ func TestSubscriptionLabelsMoney(t *testing.T) {
 		if res.IsError {
 			t.Fatalf("report returned IsError, text: %s", resultText(res))
 		}
-		out := decode[ReportOut](t, res)
+		out := decode[query.ReportOut](t, res)
 		if out.Currency != "list_price_equivalent" {
 			t.Errorf("Currency = %q, want list_price_equivalent", out.Currency)
 		}
@@ -312,7 +313,7 @@ func TestSourceFilterSplits(t *testing.T) {
 	if codexRes.IsError {
 		t.Fatalf("report source=codex returned IsError, text: %s", resultText(codexRes))
 	}
-	codexOut := decode[ReportOut](t, codexRes)
+	codexOut := decode[query.ReportOut](t, codexRes)
 	if len(codexOut.BySource) != 1 {
 		t.Fatalf("source=codex BySource = %v, want exactly one key", codexOut.BySource)
 	}
@@ -324,7 +325,7 @@ func TestSourceFilterSplits(t *testing.T) {
 	if claudeRes.IsError {
 		t.Fatalf("report source=claude-code returned IsError, text: %s", resultText(claudeRes))
 	}
-	claudeOut := decode[ReportOut](t, claudeRes)
+	claudeOut := decode[query.ReportOut](t, claudeRes)
 	if len(claudeOut.BySource) != 1 {
 		t.Fatalf("source=claude-code BySource = %v, want exactly one key", claudeOut.BySource)
 	}
@@ -332,7 +333,7 @@ func TestSourceFilterSplits(t *testing.T) {
 		t.Errorf("source=claude-code BySource = %v, want key %q", claudeOut.BySource, "claude-code")
 	}
 
-	unfiltered := decode[ReportOut](t, callTool(t, cs, "report", map[string]any{"since": "all"}))
+	unfiltered := decode[query.ReportOut](t, callTool(t, cs, "report", map[string]any{"since": "all"}))
 	sum := codexOut.USD + claudeOut.USD
 	diff := sum - unfiltered.USD
 	if diff < 0 {
@@ -356,17 +357,17 @@ func TestMatchesLedgerTotal(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("report returned IsError, text: %s", resultText(res))
 	}
-	out := decode[ReportOut](t, res)
+	out := decode[query.ReportOut](t, res)
 
-	sc, err := a.newScope(Scope{Since: "all"})
+	sc, err := a.NewScope(query.Scope{Since: "all"})
 	if err != nil {
-		t.Fatalf("newScope: %v", err)
+		t.Fatalf("NewScope: %v", err)
 	}
-	sessions, err := ledger.Sessions(a.st, a.prices, sc.filter)
+	sessions, err := ledger.Sessions(a.Store(), a.PriceTable(), sc.Filter())
 	if err != nil {
 		t.Fatalf("ledger.Sessions: %v", err)
 	}
-	tot, err := ledger.Total(sessions, a.st, a.prices)
+	tot, err := ledger.Total(sessions, a.Store(), a.PriceTable())
 	if err != nil {
 		t.Fatalf("ledger.Total: %v", err)
 	}
@@ -383,7 +384,7 @@ func TestSessionsAndSession(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("sessions returned IsError, text: %s", resultText(res))
 	}
-	out := decode[SessionsOut](t, res)
+	out := decode[query.SessionsOut](t, res)
 	if len(out.Sessions) != 2 {
 		t.Fatalf("len(Sessions) = %d, want 2", len(out.Sessions))
 	}
@@ -396,11 +397,11 @@ func TestSessionsAndSession(t *testing.T) {
 		}
 	}
 
-	all := decode[SessionsOut](t, callTool(t, cs, "sessions", map[string]any{"since": "all", "limit": 0}))
+	all := decode[query.SessionsOut](t, callTool(t, cs, "sessions", map[string]any{"since": "all", "limit": 0}))
 	if len(all.Sessions) != 4 {
 		t.Fatalf("len(Sessions) with limit 0 = %d, want every row (4)", len(all.Sessions))
 	}
-	dflt := decode[SessionsOut](t, callTool(t, cs, "sessions", map[string]any{"since": "all"}))
+	dflt := decode[query.SessionsOut](t, callTool(t, cs, "sessions", map[string]any{"since": "all"}))
 	if len(dflt.Sessions) != 4 || dflt.Total != 4 {
 		t.Fatalf("sessions with no limit: %d rows, Total %d, want 4 and 4", len(dflt.Sessions), dflt.Total)
 	}
@@ -414,7 +415,7 @@ func TestSessionsAndSession(t *testing.T) {
 	if full.IsError {
 		t.Fatalf("session id=thr_0001 returned IsError, text: %s", resultText(full))
 	}
-	fullOut := decode[SessionDetailOut](t, full)
+	fullOut := decode[query.SessionDetailOut](t, full)
 	if fullOut.ID != "thr_0001" {
 		t.Errorf("ID = %q, want thr_0001", fullOut.ID)
 	}
@@ -440,21 +441,125 @@ func TestSessionsAndSession(t *testing.T) {
 	}
 }
 
+// TestSessionDetailForTheWebUI covers the fields a turn-by-turn view needs
+// that a text transcript never did: the running context size, the rollups
+// that save a caller counting turns itself, the sub-agent launches, and the
+// child runs. sess-0001 is the Claude fixture: four turns, never compacted,
+// one researcher launched partway through.
+func TestSessionDetailForTheWebUI(t *testing.T) {
+	a := newTestApp(t)
+	cs := newTestSession(t, a)
+
+	res := callTool(t, cs, "session", map[string]any{"id": "sess-0001"})
+	if res.IsError {
+		t.Fatalf("session id=sess-0001 returned IsError, text: %s", resultText(res))
+	}
+	out := decode[query.SessionDetailOut](t, res)
+
+	if out.TurnCount != len(out.Turns) {
+		t.Errorf("turn_count = %d, len(turns) = %d, want equal", out.TurnCount, len(out.Turns))
+	}
+	if out.TurnCount == 0 {
+		t.Fatal("turn_count = 0, want the fixture's turns")
+	}
+	// The rollups are the session row's own, not a re-count of what was
+	// returned: the fixture makes tool calls, and its parent id is empty
+	// because it is a main session.
+	var turnCalls int
+	for _, t := range out.Turns {
+		turnCalls += t.ToolCalls
+	}
+	if out.ToolCalls <= 0 || out.ToolCalls != turnCalls {
+		t.Errorf("tool_calls = %d, want the fixture's tool calls (%d across the turns returned)", out.ToolCalls, turnCalls)
+	}
+	if out.ParentSessionID != "" {
+		t.Errorf("parent_session_id = %q, want empty on a main session", out.ParentSessionID)
+	}
+
+	// Nothing in this fixture is compacted, so the context the model saw can
+	// only grow: each turn re-sends the last one's prompt plus what followed.
+	var prev int64
+	for _, turn := range out.Turns {
+		if turn.Context <= 0 {
+			t.Errorf("turn %d context = %d, want > 0", turn.Index, turn.Context)
+		}
+		if turn.CompactionBefore {
+			t.Errorf("turn %d reports a compaction; the fixture has none", turn.Index)
+		}
+		if turn.Context < prev {
+			t.Errorf("turn %d context = %d, fell from %d without a compaction", turn.Index, turn.Context, prev)
+		}
+		prev = turn.Context
+	}
+
+	// The Agent tool call in the fixture is reported as a launch, resolved
+	// model and all, so a caller can follow the spend into the child run.
+	var launches []query.LaunchOut
+	for _, turn := range out.Turns {
+		launches = append(launches, turn.Launches...)
+	}
+	if len(launches) != 1 {
+		t.Fatalf("got %d launches %+v, want the fixture's one researcher", len(launches), launches)
+	}
+	if launches[0].AgentType != "researcher" || launches[0].AgentID != "agent01" {
+		t.Errorf("launch = %+v, want agent_type researcher and agent_id agent01", launches[0])
+	}
+	if launches[0].ResolvedModel == "" {
+		t.Errorf("launch = %+v, want the model the harness reported it ran", launches[0])
+	}
+
+	// subagents is always an array, and this session has a child.
+	if out.Subagents == nil {
+		t.Fatal("subagents is null, want an array")
+	}
+	if len(out.Subagents) != 1 {
+		t.Fatalf("got %d sub-agent runs %+v, want 1", len(out.Subagents), out.Subagents)
+	}
+	if out.Subagents[0].ParentSessionID != "sess-0001" {
+		t.Errorf("sub-agent parent_session_id = %q, want sess-0001", out.Subagents[0].ParentSessionID)
+	}
+	if out.Subagents[0].AgentType != "researcher" {
+		t.Errorf("sub-agent agent_type = %q, want researcher", out.Subagents[0].AgentType)
+	}
+
+	// A session with no children still returns an array rather than null,
+	// and reports its own tool rollups.
+	child := decode[query.SessionDetailOut](t, callTool(t, cs, "session", map[string]any{"id": out.Subagents[0].ID}))
+	if child.Subagents == nil || len(child.Subagents) != 0 {
+		t.Errorf("sub-agent's own subagents = %+v, want an empty array", child.Subagents)
+	}
+	if child.ParentSessionID != "sess-0001" {
+		t.Errorf("sub-agent parent_session_id = %q, want sess-0001", child.ParentSessionID)
+	}
+	if child.TurnCount != len(child.Turns) {
+		t.Errorf("sub-agent turn_count = %d, len(turns) = %d, want equal", child.TurnCount, len(child.Turns))
+	}
+}
+
 func TestNoTranscriptTextLeaks(t *testing.T) {
 	a := newTestApp(t)
 	cs := newTestSession(t, a)
 
-	res := callTool(t, cs, "session", map[string]any{"id": "thr_0001"})
-	if res.IsError {
-		t.Fatalf("session returned IsError, text: %s", resultText(res))
-	}
-	b, err := json.Marshal(res.StructuredContent)
-	if err != nil {
-		t.Fatalf("marshal structured content: %v", err)
-	}
+	// Both sources: the Claude fixture is the one with launches and
+	// sub-agent rows, which carry the newest fields.
 	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	for _, id := range []string{"thr_0001", "sess-0001"} {
+		res := callTool(t, cs, "session", map[string]any{"id": id})
+		if res.IsError {
+			t.Fatalf("session %s returned IsError, text: %s", id, resultText(res))
+		}
+		b, err := json.Marshal(res.StructuredContent)
+		if err != nil {
+			t.Fatalf("marshal structured content: %v", err)
+		}
+		var one map[string]any
+		if err := json.Unmarshal(b, &one); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if m == nil {
+			m = map[string]any{}
+		}
+		m[id] = one
 	}
 
 	forbidden := map[string]bool{
@@ -488,7 +593,7 @@ func TestAgentsChangesPricesRefresh(t *testing.T) {
 	if agentsRes.IsError {
 		t.Fatalf("agents returned IsError, text: %s", resultText(agentsRes))
 	}
-	agentsOut := decode[AgentsOut](t, agentsRes)
+	agentsOut := decode[query.AgentsOut](t, agentsRes)
 	found := false
 	for _, ag := range agentsOut.Agents {
 		if ag.Agent == "researcher" {
@@ -511,7 +616,7 @@ func TestAgentsChangesPricesRefresh(t *testing.T) {
 	if changesRes.IsError {
 		t.Fatalf("changes returned IsError, text: %s", resultText(changesRes))
 	}
-	changesOut := decode[ChangesOut](t, changesRes)
+	changesOut := decode[query.ChangesOut](t, changesRes)
 	if changesOut.MinRuns != 3 {
 		t.Errorf("MinRuns = %d, want 3 (default)", changesOut.MinRuns)
 	}
@@ -528,7 +633,7 @@ func TestAgentsChangesPricesRefresh(t *testing.T) {
 	if pricesRes.IsError {
 		t.Fatalf("prices returned IsError, text: %s", resultText(pricesRes))
 	}
-	pricesOut := decode[PricesOut](t, pricesRes)
+	pricesOut := decode[query.PricesOut](t, pricesRes)
 	if pricesOut.Verified == "" {
 		t.Error("Verified is empty")
 	}
@@ -555,7 +660,7 @@ func TestAgentsChangesPricesRefresh(t *testing.T) {
 	if refreshRes.IsError {
 		t.Fatalf("refresh returned IsError, text: %s", resultText(refreshRes))
 	}
-	refreshOut := decode[RefreshOut](t, refreshRes)
+	refreshOut := decode[query.RefreshOut](t, refreshRes)
 	if refreshOut.Scanned <= 0 {
 		t.Errorf("Scanned = %d, want > 0", refreshOut.Scanned)
 	}
@@ -569,29 +674,29 @@ func TestLazyRefresh(t *testing.T) {
 	cs := newTestSession(t, a)
 
 	fakeNow := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
-	a.now = func() time.Time { return fakeNow }
+	a.Now = func() time.Time { return fakeNow }
 
 	// The first call performs the first scan (newApp does not).
 	res := callTool(t, cs, "report", map[string]any{"since": "all"})
 	if res.IsError {
 		t.Fatalf("report returned IsError, text: %s", resultText(res))
 	}
-	if !a.lastIngest.Equal(fakeNow) || !a.lastAttempt.Equal(fakeNow) {
-		t.Fatalf("after first call lastIngest = %v, lastAttempt = %v, want both %v", a.lastIngest, a.lastAttempt, fakeNow)
+	if !a.LastIngestAt.Equal(fakeNow) || !a.LastAttemptAt.Equal(fakeNow) {
+		t.Fatalf("after first call lastIngest = %v, lastAttempt = %v, want both %v", a.LastIngestAt, a.LastAttemptAt, fakeNow)
 	}
-	out := decode[ReportOut](t, res)
+	out := decode[query.ReportOut](t, res)
 	if out.IngestedAt != fakeNow.Format(time.RFC3339) || out.AgeSeconds != 0 {
 		t.Errorf("Freshness = %+v, want ingested_at %s and age 0", out.Freshness, fakeNow.Format(time.RFC3339))
 	}
 
-	before := a.lastIngest
+	before := a.LastIngestAt
 	fakeNow = fakeNow.Add(30 * time.Second)
 	res = callTool(t, cs, "report", map[string]any{"since": "all"})
 	if res.IsError {
 		t.Fatalf("report returned IsError, text: %s", resultText(res))
 	}
-	if !a.lastIngest.Equal(before) {
-		t.Errorf("lastIngest = %v, want unchanged %v (well under refreshAfter)", a.lastIngest, before)
+	if !a.LastIngestAt.Equal(before) {
+		t.Errorf("lastIngest = %v, want unchanged %v (well under query.RefreshAfter)", a.LastIngestAt, before)
 	}
 
 	fakeNow = fakeNow.Add(31 * time.Second)
@@ -599,18 +704,18 @@ func TestLazyRefresh(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("report returned IsError, text: %s", resultText(res))
 	}
-	if !a.lastIngest.Equal(fakeNow) {
-		t.Errorf("lastIngest = %v, want advanced to %v", a.lastIngest, fakeNow)
+	if !a.LastIngestAt.Equal(fakeNow) {
+		t.Errorf("lastIngest = %v, want advanced to %v", a.LastIngestAt, fakeNow)
 	}
 
 	// A failed attempt is throttled like a successful one and surfaced in
 	// both the structured value and the prose.
-	a.lastError = "codex root unreadable (simulated)"
+	a.SetLastError("codex root unreadable (simulated)")
 	res = callTool(t, cs, "report", map[string]any{"since": "all"})
 	if res.IsError {
 		t.Fatalf("report returned IsError, text: %s", resultText(res))
 	}
-	out = decode[ReportOut](t, res)
+	out = decode[query.ReportOut](t, res)
 	if out.ScanError == "" {
 		t.Error("ScanError is empty after a failed attempt")
 	}
@@ -631,7 +736,7 @@ func TestReportCacheHitRateIsAlwaysReturned(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("report returned IsError: %s", resultText(res))
 	}
-	out := decode[ReportOut](t, res)
+	out := decode[query.ReportOut](t, res)
 	if out.CacheHitRate < 0 || out.CacheHitRate > 1 {
 		t.Errorf("cache_hit_rate = %v, want 0..1", out.CacheHitRate)
 	}
@@ -641,12 +746,17 @@ func TestReportCacheHitRateIsAlwaysReturned(t *testing.T) {
 	if text := resultText(res); !strings.Contains(text, "Cache hit rate") {
 		t.Errorf("text should name the cache hit rate:\n%s", text)
 	}
-	// The structured value and the ledger agree to the last decimal.
-	sc, err := a.newScope(Scope{Since: "all"})
+	// The structured value and the ledger agree to the last decimal, over
+	// the same filter the answer itself was computed from.
+	sc, err := a.NewScope(query.Scope{Since: "all"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, totals, err := a.sessionsAndTotals(sc)
+	sessions, err := ledger.Sessions(a.Store(), a.PriceTable(), sc.Filter())
+	if err != nil {
+		t.Fatal(err)
+	}
+	totals, err := ledger.Total(sessions, a.Store(), a.PriceTable())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -663,7 +773,7 @@ func TestReportCompareReturnsThePriorWindow(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("report compare returned IsError: %s", resultText(res))
 	}
-	out := decode[ReportOut](t, res)
+	out := decode[query.ReportOut](t, res)
 	if out.Prior == nil {
 		t.Fatal("prior missing with compare=true")
 	}
@@ -713,11 +823,37 @@ func TestReportCompareOnAnEmptyPriorWindow(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("report compare returned IsError: %s", resultText(res))
 	}
-	out := decode[ReportOut](t, res)
+	out := decode[query.ReportOut](t, res)
 	if out.Prior == nil || out.Prior.Sessions != 0 || out.Prior.USD != 0 {
 		t.Errorf("empty prior window should still be returned, with zeros: %+v", out.Prior)
 	}
 	if !strings.Contains(resultText(res), "nothing to compare with") {
 		t.Errorf("text should say the prior window is empty:\n%s", resultText(res))
+	}
+}
+
+// TestSessionPrefixPrefersTheMainSession covers the one prefix that used to
+// be ambiguous by construction: a parent's own id is a prefix of every run
+// it launched, so "sess-000" matched both the fixture session and its
+// sub-agent. The main session wins; the run is still reachable by a prefix
+// that names it.
+func TestSessionPrefixPrefersTheMainSession(t *testing.T) {
+	a := newTestApp(t)
+	cs := newTestSession(t, a)
+
+	res := callTool(t, cs, "session", map[string]any{"id": "sess-000"})
+	if res.IsError {
+		t.Fatalf("session id=sess-000: IsError = true, text: %s", resultText(res))
+	}
+	if out := decode[query.SessionDetailOut](t, res); out.ID != "sess-0001" {
+		t.Errorf("session id=sess-000 resolved to %q, want sess-0001", out.ID)
+	}
+
+	res = callTool(t, cs, "session", map[string]any{"id": "sess-0001/agent-"})
+	if res.IsError {
+		t.Fatalf("session id=sess-0001/agent-: IsError = true, text: %s", resultText(res))
+	}
+	if out := decode[query.SessionDetailOut](t, res); out.ParentSessionID != "sess-0001" {
+		t.Errorf("session id=sess-0001/agent- resolved to %q with parent %q, want the sub-agent run", out.ID, out.ParentSessionID)
 	}
 }

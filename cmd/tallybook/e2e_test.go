@@ -662,3 +662,24 @@ func TestE2ECompareOnAnEmptyPriorWindow(t *testing.T) {
 		t.Errorf("an empty prior window should say so:\n%s", out)
 	}
 }
+
+// TestE2ESessionPrefixPrefersTheMainSession checks the CLI's resolver agrees
+// with the MCP server's: a prefix that matches a session and the runs it
+// launched means the session.
+func TestE2ESessionPrefixPrefersTheMainSession(t *testing.T) {
+	e2eEnv(t)
+	out, err := run(t, "--since", "all", "session", "sess-000")
+	if err != nil {
+		t.Fatalf("session sess-000: %v\noutput:\n%s", err, out)
+	}
+	if !strings.HasPrefix(out, "Session sess-0001 (") {
+		t.Errorf("session sess-000 output does not open with the main session:\n%s", out)
+	}
+	out, err = run(t, "--since", "all", "session", "sess-0001/agent-")
+	if err != nil {
+		t.Fatalf("session sess-0001/agent-: %v\noutput:\n%s", err, out)
+	}
+	if !strings.HasPrefix(out, "Session sess-0001/agent-") {
+		t.Errorf("session sess-0001/agent- output does not open with the sub-agent run:\n%s", out)
+	}
+}

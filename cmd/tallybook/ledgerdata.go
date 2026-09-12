@@ -6,6 +6,7 @@ import (
 	"github.com/magna-nz/tallybook/internal/agentfile"
 	"github.com/magna-nz/tallybook/internal/findings"
 	"github.com/magna-nz/tallybook/internal/ledger"
+	"github.com/magna-nz/tallybook/internal/query"
 	"github.com/magna-nz/tallybook/internal/report"
 	"github.com/magna-nz/tallybook/internal/store"
 )
@@ -77,16 +78,7 @@ func projectRoots(ctx *appContext) []string {
 	if err != nil {
 		return nil
 	}
-	seen := map[string]bool{}
-	var roots []string
-	for _, r := range rows {
-		if r.Project == "" || seen[r.Project] {
-			continue
-		}
-		seen[r.Project] = true
-		roots = append(roots, r.Project)
-	}
-	return roots
+	return query.DistinctProjects(rows)
 }
 
 // priorComparison builds the window-on-window block for --compare: the same
