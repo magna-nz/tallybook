@@ -1,0 +1,93 @@
+name: price drift
+
+# Vendors reprice models without telling anyone, and a stale rate in
+# prices.go is silent: every historical session quietly re-prices and
+# nothing looks wrong. This job is the thing that notices. It never edits
+# prices — it opens an issue naming the model, and a human checks the
+# vendor's page and makes the call.
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Mondays, 09:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: check prices against the reference list
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Built rather than `go run`: go run collapses every non-zero exit to
+      # 1, which would make a broken fetch indistinguishable from real drift
+      # and file a bogus issue about it.
+      - name: Build the checker
+        run: go build -o pricedrift ./tools/pricedrift
+
+      - name: Check for drift
+        id: check
+        run: |
+          set +e
+          ./pricedrift 2>&1 | tee drift.txt
+          echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      # Exit 2 means the check itself could not run — the source moved, the
+      # fetch failed, the file changed shape. That is a broken job, not a
+      # pricing event, and it should be loud rather than filed as drift.
+      - name: Fail if the check could not run
+        if: steps.check.outputs.code == '2'
+        run: |
+          echo "::error::pricedrift could not complete; see the log above."
+          exit 1
+
+      # One open issue at a time. Without this the job refiles the same
+      # drift every Monday until someone acts, which trains people to
+      # ignore it — the exact failure this job exists to avoid.
+      - name: Open an issue if prices moved
+        if: steps.check.outputs.code == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Price drift: a vendor rate no longer matches prices.go"
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --state open --limit 100 \
+            --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n1)
+          if [ -n "$existing" ]; then
+            echo "Issue #$existing is already open for this; not filing another."
+            exit 0
+          fi
+          {
+            echo "A rate in the reference list no longer matches \`internal/pricing/prices.go\`."
+            echo
+            echo "**This is not automatic.** Check each model against the vendor's own"
+            echo "pricing page before changing anything — the reference list is a tripwire,"
+            echo "not an authority."
+            echo
+            echo "Then decide which of two things happened:"
+            echo
+            echo "- **The vendor repriced.** Update \`basePrices\` *and* add a \`priceHistory\`"
+            echo "  row. Updating \`basePrices\` alone silently re-prices every historical"
+            echo "  session at the new rate."
+            echo "- **Our number was wrong all along.** Update \`basePrices\` only. Do *not*"
+            echo "  add a history row — it would assert a price change that never happened."
+            echo
+            echo '```'
+            cat drift.txt
+            echo '```'
+            echo
+            echo "— [\`price-drift\`](.github/workflows/price-drift.yml) run ${{ github.run_id }}"
+          } > body.md
+          gh issue create --title "$TITLE" --body-file body.md
