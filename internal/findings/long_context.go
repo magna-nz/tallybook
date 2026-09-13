@@ -67,7 +67,7 @@ func (longContextRule) Run(in Input) (*Finding, error) {
 			if ctx <= threshold {
 				continue
 			}
-			rate, ok := in.Prices.LookupAt(t.Model, t.Timestamp)
+			rate, ok := in.Prices.RateForTurn(t.Model, t)
 			if !ok {
 				continue // a missing price is never guessed at
 			}

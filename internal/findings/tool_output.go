@@ -54,7 +54,7 @@ func (toolOutputRule) Run(in Input) (*Finding, error) {
 		var cacheReadCost float64
 		for _, t := range turns {
 			contextTokens += t.Usage.ContextTokens()
-			if rate, ok := in.Prices.LookupAt(t.Model, t.Timestamp); ok {
+			if rate, ok := in.Prices.RateForTurn(t.Model, t); ok {
 				cacheReadCost += float64(t.Usage.CacheRead) * rate.CacheRead / 1e6
 			}
 		}

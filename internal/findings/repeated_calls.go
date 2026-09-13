@@ -120,7 +120,7 @@ func (repeatedCallsRule) Run(in Input) (*Finding, error) {
 					continue
 				}
 				turn := turns[c.turnIndex]
-				rate, ok := in.Prices.LookupAt(turn.Model, turn.Timestamp)
+				rate, ok := in.Prices.RateForTurn(turn.Model, turn)
 				if !ok {
 					continue
 				}
@@ -154,7 +154,7 @@ func (repeatedCallsRule) Run(in Input) (*Finding, error) {
 			// context is a measured figure, and the claim can never exceed it.
 			var cacheReadCost float64
 			for _, t := range turns {
-				if rate, ok := in.Prices.LookupAt(t.Model, t.Timestamp); ok {
+				if rate, ok := in.Prices.RateForTurn(t.Model, t); ok {
 					cacheReadCost += float64(t.Usage.CacheRead) * rate.CacheRead / 1e6
 				}
 			}

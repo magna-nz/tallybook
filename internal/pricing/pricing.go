@@ -19,10 +19,69 @@ import (
 
 // datedVersion is the date the built-in table was last checked against the
 // vendor pricing pages.
-const datedVersion = "2026-09-10"
+const datedVersion = "2026-09-13"
 
 // Rate is USD per million tokens.
-type Rate struct{ Input, CacheRead, CacheWrite5m, CacheWrite1h, Output float64 }
+//
+// A model may bill more than one tier. Fast and Long hold those tiers as
+// whole rates rather than multipliers, because vendors publish them as
+// figures and a multiplier would invent precision the pricing page does not
+// have. Both are nil for a model that bills one tier across the board.
+type Rate struct {
+	Input, CacheRead, CacheWrite5m, CacheWrite1h, Output float64
+
+	// Fast is what the model bills when the harness ran the turn in fast
+	// mode. Caching multipliers apply on top of fast pricing, so this is a
+	// full rate, not just input and output.
+	Fast *Rate
+	// Long is what the model bills once the prompt is larger than
+	// LongContextFrom tokens.
+	Long *Rate
+	// LongContextFrom is the prompt size above which Long applies. It is
+	// zero exactly when Long is nil.
+	LongContextFrom int64
+}
+
+// For returns the flat rate that actually applies to a turn, given the
+// harness's speed setting and the size of the prompt.
+//
+// The tiers do not stack, and today they cannot collide: Anthropic
+// publishes a fast tier and prices its full context window at one rate,
+// OpenAI publishes a long-context tier and no fast mode. Anthropic is
+// explicit that fast pricing covers the whole window, so fast wins if a
+// model ever carries both.
+func (r Rate) For(speed string, contextTokens int64) Rate {
+	switch {
+	case r.Fast != nil && strings.EqualFold(strings.TrimSpace(speed), "fast"):
+		return (*r.Fast).flat()
+	case r.Long != nil && r.LongContextFrom > 0 && contextTokens > r.LongContextFrom:
+		return (*r.Long).flat()
+	}
+	return r.flat()
+}
+
+// flat strips the tier fields, so the result is the single rate it claims to
+// be: it cannot be tiered a second time, and it shares no pointer with the
+// table it came from.
+func (r Rate) flat() Rate {
+	r.Fast, r.Long, r.LongContextFrom = nil, nil, 0
+	return r
+}
+
+// clone returns a Rate whose tiers are its own. Default() uses it so that a
+// Table never shares tier pointers with the package-level basePrices, where
+// one stray write would reprice every model for the rest of the process.
+func (r Rate) clone() Rate {
+	if r.Fast != nil {
+		f := *r.Fast
+		r.Fast = &f
+	}
+	if r.Long != nil {
+		l := *r.Long
+		r.Long = &l
+	}
+	return r
+}
 
 // pastRate is a rate that applied strictly before Until.
 type pastRate struct {
@@ -57,7 +116,7 @@ func Default() *Table {
 		aliases: make(map[string]string, len(defaultAliases)),
 	}
 	for id, r := range basePrices {
-		t.rates[strings.ToLower(id)] = r
+		t.rates[strings.ToLower(id)] = r.clone()
 	}
 	for _, h := range priceHistory {
 		until, err := time.Parse("2006-01-02", h.Until)
@@ -80,6 +139,16 @@ func (t *Table) Dated() string {
 // Set adds or overrides the current rate for an exact model id (used by
 // config overrides). It also discards any history for that id, because an
 // override is a statement about what the user pays, not about the past.
+//
+// The same reasoning drops the model's Fast and Long tiers unless the
+// caller supplies its own: a flat override says the user pays one rate.
+// Config can only express a flat rate today, so overriding a model that
+// has a tier (Opus 5's fast mode, say) prices every turn at the override,
+// premium turns included.
+//
+// model is matched by exact id, lower-cased, not through Canonical: an
+// override keyed on an alias such as "opus" adds a row nothing resolves to
+// and silently leaves claude-opus-5 at its built-in rate.
 func (t *Table) Set(model string, r Rate) {
 	id := strings.ToLower(model)
 	t.rates[id] = r
@@ -230,14 +299,39 @@ func (t *Table) Cost(modelID string, u model.Usage) (usd float64, known bool) {
 	return t.CostAt(modelID, u, time.Time{})
 }
 
-// CostAt prices one turn at the rate in force when it happened. Callers
-// that have a turn timestamp should always use this rather than Cost.
+// CostAt prices a usage at the standard-tier rate in force at a moment in
+// time. It knows nothing about fast mode or long context, so callers
+// holding a whole Turn should use CostTurn instead.
 func (t *Table) CostAt(modelID string, u model.Usage, at time.Time) (usd float64, known bool) {
 	r, ok := t.LookupAt(modelID, at)
 	if !ok {
 		return 0, false
 	}
 	return r.Apply(u), true
+}
+
+// RateForTurn returns the rate in force for one turn: the right model, the
+// price on the day it ran, and the tier its speed and prompt size put it
+// in. modelID is passed separately so a caller can ask what the same turn
+// would have cost on a different model.
+func (t *Table) RateForTurn(modelID string, tu model.Turn) (Rate, bool) {
+	r, ok := t.LookupAt(modelID, tu.Timestamp)
+	if !ok {
+		return Rate{}, false
+	}
+	return r.For(tu.Speed, tu.Usage.ContextTokens()), true
+}
+
+// CostTurn prices one turn on the model it actually ran on, tier included.
+// Prefer it over CostAt anywhere a whole Turn is in hand: CostAt cannot see
+// the speed setting or the prompt size, so it silently prices a fast-mode
+// or long-context turn at the standard rate.
+func (t *Table) CostTurn(tu model.Turn) (usd float64, known bool) {
+	r, ok := t.RateForTurn(tu.Model, tu)
+	if !ok {
+		return 0, false
+	}
+	return r.Apply(tu.Usage), true
 }
 
 // Apply prices a usage at this rate.
@@ -285,11 +379,12 @@ func Tier(modelID string) string {
 	case strings.Contains(m, "-mini"):
 		return "gpt-mini"
 	}
-	// The 5.6 named variants have no -pro/-mini/-nano suffix: astra is the
-	// flagship (gpt-pro), sol/terra are mid-tier (gpt), luna is the small
-	// model (gpt-mini).
+	// The 5.6 and 6 named variants have no -pro/-mini/-nano suffix: astra
+	// and cyber are top-end (gpt-pro), sol/terra are mid-tier (gpt), luna is
+	// the small model (gpt-mini). cyber costs more than astra, so leaving it
+	// mid-tier would offer gpt-5.4-mini as its "one step down".
 	switch {
-	case strings.Contains(m, "astra"):
+	case strings.Contains(m, "astra"), strings.Contains(m, "cyber"):
 		return "gpt-pro"
 	case strings.Contains(m, "luna"):
 		return "gpt-mini"

@@ -77,7 +77,7 @@ func (cacheRebuildRule) Run(in Input) (*Finding, error) {
 
 			// What the re-send cost, less what reading the same tokens back
 			// out of the cache would have cost.
-			if rate, ok := in.Prices.LookupAt(cur.Model, cur.Timestamp); ok {
+			if rate, ok := in.Prices.RateForTurn(cur.Model, cur); ok {
 				write := float64(cur.Usage.CacheWrite5m)*rate.CacheWrite5m +
 					float64(cur.Usage.CacheWrite1h)*rate.CacheWrite1h
 				read := float64(written) * rate.CacheRead

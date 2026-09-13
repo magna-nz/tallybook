@@ -52,7 +52,7 @@ func runSession(cmd *cobra.Command, flags *globalFlags, idOrPrefix string) error
 	}
 	var usd float64
 	for _, t := range turns {
-		v, _ := ctx.prices.CostAt(t.Model, t.Usage, t.Timestamp)
+		v, _ := ctx.prices.CostTurn(t)
 		usd += v
 	}
 

@@ -72,7 +72,17 @@ of screenshots was priced as if it were carrying a small library.
 
 A dated table per vendor. Cost per turn is
 `input*base + cache_read*read + cache_write_5m*w5 + cache_write_1h*w1 + output*out`.
-Codex has no TTL split; cache writes are billed at the base input rate.
+
+A model may bill that formula at more than one tier, so the rate is chosen
+per turn before the formula is applied. Claude Opus 5 and Opus 4.8 bill
+double under fast mode, and the harness records which turns ran that way.
+Sonnet 4 and 4.5 bill double above a 200k prompt, and OpenAI from gpt-5.4
+onward bills double above 272k; Claude 4.6 and later price the whole window
+at one rate. The threshold reads the prompt, not the response, so a long
+answer never moves a turn into the long tier.
+Codex has no TTL split, so both write columns carry one figure. Through gpt-5.5
+that figure is the base input rate, no cache-write cost being published; from
+gpt-5.6 onward it is the published cache-write rate, 1.25x input.
 
 ## Measured versus estimated
 

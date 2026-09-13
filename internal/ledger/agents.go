@@ -63,7 +63,7 @@ func Agents(st *store.Store, pr *pricing.Table, f store.Filter) ([]AgentRow, err
 		}
 		var sessionUSD float64
 		for _, t := range turns {
-			usd, _ := pr.CostAt(t.Model, t.Usage, t.Timestamp)
+			usd, _ := pr.CostTurn(t)
 			sessionUSD += usd
 			if t.Effort != "" {
 				a.effortCount[t.Effort]++

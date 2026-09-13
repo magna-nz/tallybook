@@ -20,7 +20,7 @@ import (
 func costOf(in Input, turns []model.Turn) float64 {
 	var total float64
 	for _, t := range turns {
-		if usd, ok := in.Prices.CostAt(t.Model, t.Usage, t.Timestamp); ok {
+		if usd, ok := in.Prices.CostTurn(t); ok {
 			total += usd
 		}
 	}
@@ -33,7 +33,15 @@ func costOf(in Input, turns []model.Turn) float64 {
 func costAs(in Input, turns []model.Turn, altModel string) float64 {
 	var total float64
 	for _, t := range turns {
-		r, ok := in.Prices.LookupAt(altModel, t.Timestamp)
+		alt := t
+		// Carry the speed setting over only when the model actually run
+		// billed a premium for it. Otherwise a turn that paid no fast
+		// premium is compared against an alternative charged one, which can
+		// turn a real saving negative and suppress the finding outright.
+		if r, ok := in.Prices.LookupAt(t.Model, t.Timestamp); !ok || r.Fast == nil {
+			alt.Speed = ""
+		}
+		r, ok := in.Prices.RateForTurn(altModel, alt)
 		if !ok {
 			continue
 		}
@@ -161,6 +169,13 @@ func mostCommonModel(turns []model.Turn) string {
 
 // outputRatio is how many times more the output tokens of a cost as much as
 // b's, at the given moment. It returns 0 when either price is unknown.
+//
+// This compares standard-tier rates, and the result is a headline figure
+// only: tiers do not scale uniformly, so the ratio is not tier-invariant.
+// Fast doubles output, Long raises input 2x but output only 1.5x, and
+// usually only one side of a comparison carries a tier at all. The savings
+// these findings quote come from costAs, which is tier-aware; this ratio is
+// the "about Nx dearer" phrase printed beside them.
 func outputRatio(in Input, a, b string, at time.Time) float64 {
 	ra, oka := in.Prices.LookupAt(a, at)
 	rb, okb := in.Prices.LookupAt(b, at)

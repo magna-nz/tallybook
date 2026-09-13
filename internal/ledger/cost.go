@@ -29,7 +29,7 @@ func Sessions(st *store.Store, pr *pricing.Table, f store.Filter) ([]SessionCost
 		}
 		sc := SessionCost{SessionRow: r, Known: true}
 		for _, t := range turns {
-			usd, known := pr.CostAt(t.Model, t.Usage, t.Timestamp)
+			usd, known := pr.CostTurn(t)
 			sc.USD += usd
 			if !known {
 				sc.Known = false
@@ -97,7 +97,7 @@ func Total(sessions []SessionCost, st *store.Store, pr *pricing.Table) (Totals, 
 			return Totals{}, err
 		}
 		for _, t := range turns {
-			usd, known := pr.CostAt(t.Model, t.Usage, t.Timestamp)
+			usd, known := pr.CostTurn(t)
 			if !known {
 				tot.UnknownModels[t.Model]++
 				continue

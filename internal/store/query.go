@@ -249,7 +249,7 @@ func (s *Store) attachModels(ids []string, result []SessionRow) error {
 // ToolCalls (and Agent launch data) attached.
 func (s *Store) Turns(sessionID string) ([]model.Turn, error) {
 	rows, err := s.db.Query(`
-		SELECT id, ts, model, effort, input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars, compaction_before
+		SELECT id, ts, model, effort, COALESCE(speed, ''), input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars, compaction_before
 		FROM turns WHERE session_id = ? ORDER BY ts`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("store: query turns: %w", err)
@@ -263,7 +263,7 @@ func (s *Store) Turns(sessionID string) ([]model.Turn, error) {
 		var ts int64
 		var compactionBefore int
 		err := rows.Scan(
-			&t.ID, &ts, &t.Model, &t.Effort,
+			&t.ID, &ts, &t.Model, &t.Effort, &t.Speed,
 			&t.Usage.Input, &t.Usage.CacheRead, &t.Usage.CacheWrite5m, &t.Usage.CacheWrite1h,
 			&t.Usage.Output, &t.Usage.Thinking, &t.TextChars, &compactionBefore,
 		)

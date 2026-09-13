@@ -77,6 +77,27 @@ type usageJSON struct {
 		Ephemeral5m int64 `json:"ephemeral_5m_input_tokens"`
 		Ephemeral1h int64 `json:"ephemeral_1h_input_tokens"`
 	} `json:"cache_creation"`
+	// Speed is "fast" when the turn ran in fast mode, "standard" otherwise.
+	// Older transcripts omit it, and some records carry null; both read as
+	// empty, which prices at the standard rate.
+	Speed speedField `json:"speed"`
+}
+
+// speedField is a string that tolerates not being one.
+//
+// A type error anywhere in the usage object makes the whole assistant record
+// fail to unmarshal, and the parser drops such a record - so a turn whose
+// speed arrived as a number or an object would lose its tokens entirely,
+// which is far worse than pricing it at the standard rate. Until this field
+// was read, any shape was harmlessly ignored; that stays true.
+type speedField string
+
+func (s *speedField) UnmarshalJSON(b []byte) error {
+	var v string
+	if err := json.Unmarshal(b, &v); err == nil {
+		*s = speedField(v)
+	}
+	return nil
 }
 
 // userMessage is rawRecord.Message when Type == "user".
@@ -119,6 +140,7 @@ type turnBuilder struct {
 	timestamp time.Time
 	model     string
 	effort    string
+	speed     string
 	usage     model.Usage
 	usageSet  bool
 	textChars int
@@ -248,7 +270,14 @@ func Parse(path string) (*model.Transcript, error) {
 			}
 			if am.Usage != nil && !b.usageSet {
 				b.usage = usageFromJSON(am.Usage)
+				b.speed = string(am.Usage.Speed)
 				b.usageSet = true
+			} else if am.Usage != nil && b.speed == "" {
+				// The records sharing one message id normally repeat the
+				// same usage block, speed included. If the first one to
+				// carry usage did not name a speed, take it from a later
+				// one rather than pricing a fast turn as standard.
+				b.speed = string(am.Usage.Speed)
 			}
 			for _, block := range am.Content {
 				switch block.Type {
@@ -369,6 +398,7 @@ func Parse(path string) (*model.Transcript, error) {
 			Timestamp:        b.timestamp,
 			Model:            b.model,
 			Effort:           b.effort,
+			Speed:            b.speed,
 			Usage:            b.usage,
 			TextChars:        b.textChars,
 			ToolCalls:        b.toolCalls,

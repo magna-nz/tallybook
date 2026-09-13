@@ -34,7 +34,10 @@ type Config struct {
 	Prices map[string]Rate `toml:"prices"`
 }
 
-// Rate mirrors pricing.Rate so config does not import pricing.
+// Rate mirrors pricing.Rate's flat columns so config does not import
+// pricing. It cannot express a premium tier, so overriding a model that has
+// one (fast mode, or a long-context rate) makes every turn bill at the flat
+// figures here.
 type Rate struct {
 	Input        float64 `toml:"input"`
 	CacheRead    float64 `toml:"cache_read"`

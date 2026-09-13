@@ -66,6 +66,10 @@ type Turn struct {
 	Timestamp time.Time //
 	Model     string    // model id as written in the transcript
 	Effort    string    // may be empty
+	// Speed is the harness's speed setting for the turn ("fast", "standard",
+	// or empty when the transcript does not say). Fast mode bills at a
+	// premium, so a turn priced without it is priced too low.
+	Speed     string
 	Usage     Usage
 	TextChars int        // characters of visible assistant text
 	ToolCalls []ToolCall // tool invocations made in this response

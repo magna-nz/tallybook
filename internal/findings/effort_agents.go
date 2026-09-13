@@ -94,7 +94,7 @@ func (r effortAgentsRule) Run(in Input) (*Finding, error) {
 		g.efforts[effort]++
 		for _, t := range turns {
 			g.thinkingTokens += t.Usage.Thinking
-			if rate, ok := in.Prices.LookupAt(t.Model, t.Timestamp); ok {
+			if rate, ok := in.Prices.RateForTurn(t.Model, t); ok {
 				g.thinkingCost += float64(t.Usage.Thinking) * rate.Output / 1e6
 			}
 		}

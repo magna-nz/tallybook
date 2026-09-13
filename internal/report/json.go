@@ -328,12 +328,30 @@ type pricesJSONDoc struct {
 }
 
 type priceModelJSON struct {
-	ID           string  `json:"id"`
+	// omitempty because a nested tier has no id of its own; without it every
+	// tier emits "id": "" and a consumer keying by id collides them all.
+	ID           string  `json:"id,omitempty"`
 	Input        float64 `json:"input"`
 	CacheRead    float64 `json:"cacheRead"`
 	CacheWrite5m float64 `json:"cacheWrite5m"`
 	CacheWrite1h float64 `json:"cacheWrite1h"`
 	Output       float64 `json:"output"`
+	// Premium tiers, omitted for a model that bills one rate throughout.
+	Fast            *priceModelJSON `json:"fast,omitempty"`
+	Long            *priceModelJSON `json:"long,omitempty"`
+	LongContextFrom int64           `json:"longContextFrom,omitempty"`
+}
+
+// priceTierJSON renders a premium tier as the same shape as a model row,
+// minus the id and any nesting of its own.
+func priceTierJSON(r *pricing.Rate) *priceModelJSON {
+	if r == nil {
+		return nil
+	}
+	return &priceModelJSON{
+		Input: r.Input, CacheRead: r.CacheRead,
+		CacheWrite5m: r.CacheWrite5m, CacheWrite1h: r.CacheWrite1h, Output: r.Output,
+	}
 }
 
 // PricesJSON writes the price table as JSON.
@@ -347,6 +365,8 @@ func PricesJSON(w io.Writer, table *pricing.Table) error {
 		doc.Models = append(doc.Models, priceModelJSON{
 			ID: id, Input: r.Input, CacheRead: r.CacheRead,
 			CacheWrite5m: r.CacheWrite5m, CacheWrite1h: r.CacheWrite1h, Output: r.Output,
+			Fast: priceTierJSON(r.Fast), Long: priceTierJSON(r.Long),
+			LongContextFrom: r.LongContextFrom,
 		})
 	}
 	return writeJSON(w, doc)
