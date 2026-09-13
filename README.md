@@ -8,6 +8,7 @@
     <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-server-005FBA" alt="MCP server" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
     <a href="https://glama.ai/mcp/servers/magna-nz/tallybook"><img src="https://glama.ai/mcp/servers/magna-nz/tallybook/badges/score.svg?v=2" alt="Glama Quality" /></a>
+    <a href="https://mcpservers.org/servers/magna-nz/tallybook"><img src="https://mcpservers.org/badge.svg" alt="Listed on mcpservers.org" /></a>
   </p>
   <p><a href="https://magna-nz.github.io/tallybook/">Documentation</a></p>
 </div>
