@@ -4,3 +4,4 @@
 *.db-journal
 .DS_Store
 /cmd/parsecheck/
+/pricedrift

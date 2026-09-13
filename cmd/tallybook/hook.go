@@ -275,7 +275,7 @@ func hookSummaryLine(ctx *appContext, row store.SessionRow) (string, bool) {
 	var usd float64
 	var contextTokens int64
 	for _, t := range turns {
-		amt, _ := ctx.prices.CostAt(t.Model, t.Usage, t.Timestamp)
+		amt, _ := ctx.prices.CostTurn(t)
 		usd += amt
 		contextTokens += t.Usage.ContextTokens()
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/magna-nz/tallybook/internal/findings"
 	"github.com/magna-nz/tallybook/internal/ledger"
 	"github.com/magna-nz/tallybook/internal/model"
+	"github.com/magna-nz/tallybook/internal/pricing"
 	"github.com/magna-nz/tallybook/internal/report"
 	"github.com/magna-nz/tallybook/internal/store"
 )
@@ -729,7 +730,7 @@ func (a *App) Session(in SessionIn) (string, SessionDetailOut, error) {
 	}
 	var prevContext int64
 	for i, t := range turns {
-		usd, known := a.prices.CostAt(t.Model, t.Usage, t.Timestamp)
+		usd, known := a.prices.CostTurn(t)
 		out.USD += usd
 		turn := TurnOut{
 			Index: i + 1, Time: timeString(t.Timestamp), Model: t.Model, Effort: t.Effort,
@@ -796,6 +797,32 @@ type PriceOut struct {
 	CacheWrite1h float64 `json:"cache_write_1h"`
 	Output       float64 `json:"output"`
 	Override     bool    `json:"override,omitempty" jsonschema:"true when the rate comes from a [prices] table in the user's config"`
+	// Premium tiers. Without these a client cannot reconcile a per-turn usd
+	// against this table: a fast-mode Opus turn costs exactly double what
+	// the flat columns above can explain.
+	Fast            *PriceTierOut `json:"fast,omitempty" jsonschema:"the rate this model bills under fast mode, absent when it has none"`
+	Long            *PriceTierOut `json:"long,omitempty" jsonschema:"the rate this model bills once the prompt passes long_context_from tokens, absent when it has none"`
+	LongContextFrom int64         `json:"long_context_from,omitempty" jsonschema:"prompt size in tokens above which long applies"`
+}
+
+// PriceTierOut is one premium tier of a model's rate.
+type PriceTierOut struct {
+	Input        float64 `json:"input"`
+	CacheRead    float64 `json:"cache_read"`
+	CacheWrite5m float64 `json:"cache_write_5m"`
+	CacheWrite1h float64 `json:"cache_write_1h"`
+	Output       float64 `json:"output"`
+}
+
+// priceTierOut renders a tier, or nil when the model has none.
+func priceTierOut(r *pricing.Rate) *PriceTierOut {
+	if r == nil {
+		return nil
+	}
+	return &PriceTierOut{
+		Input: r.Input, CacheRead: r.CacheRead,
+		CacheWrite5m: r.CacheWrite5m, CacheWrite1h: r.CacheWrite1h, Output: r.Output,
+	}
 }
 
 // PricesOut is the table every figure in every other answer is computed
@@ -828,10 +855,22 @@ func (a *App) Prices(PricesIn) (string, PricesOut, error) {
 		out.Models = append(out.Models, PriceOut{
 			ID: id, Input: r.Input, CacheRead: r.CacheRead,
 			CacheWrite5m: r.CacheWrite5m, CacheWrite1h: r.CacheWrite1h, Output: r.Output,
-			Override: override[strings.ToLower(id)],
+			Override:        override[strings.ToLower(id)],
+			Fast:            priceTierOut(r.Fast),
+			Long:            priceTierOut(r.Long),
+			LongContextFrom: r.LongContextFrom,
 		})
 		fmt.Fprintf(&b, "  %s: in %.2f, cache read %.2f, cache write %.2f/%.2f, out %.2f\n",
 			id, r.Input, r.CacheRead, r.CacheWrite5m, r.CacheWrite1h, r.Output)
+		if r.Fast != nil {
+			fmt.Fprintf(&b, "    in fast mode: in %.2f, cache read %.2f, cache write %.2f/%.2f, out %.2f\n",
+				r.Fast.Input, r.Fast.CacheRead, r.Fast.CacheWrite5m, r.Fast.CacheWrite1h, r.Fast.Output)
+		}
+		if r.Long != nil {
+			fmt.Fprintf(&b, "    over %dk tokens: in %.2f, cache read %.2f, cache write %.2f/%.2f, out %.2f\n",
+				r.LongContextFrom/1000, r.Long.Input, r.Long.CacheRead,
+				r.Long.CacheWrite5m, r.Long.CacheWrite1h, r.Long.Output)
+		}
 	}
 	return b.String(), out, nil
 }

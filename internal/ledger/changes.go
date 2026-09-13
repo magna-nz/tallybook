@@ -88,7 +88,7 @@ func Changes(st *store.Store, pr *pricing.Table, f store.Filter, minRuns int) ([
 
 		var usd float64
 		for _, t := range turns {
-			v, _ := pr.CostAt(t.Model, t.Usage, t.Timestamp)
+			v, _ := pr.CostTurn(t)
 			usd += v
 		}
 

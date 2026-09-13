@@ -65,7 +65,7 @@ func (cache1hRule) Run(in Input) (*Finding, error) {
 		for i, t := range turns {
 			write1h += t.Usage.CacheWrite1h
 			write5m += t.Usage.CacheWrite5m
-			if rate, ok := in.Prices.LookupAt(t.Model, t.Timestamp); ok {
+			if rate, ok := in.Prices.RateForTurn(t.Model, t); ok {
 				premium += float64(t.Usage.CacheWrite1h) * (rate.CacheWrite1h - rate.CacheWrite5m) / 1e6
 			}
 			if i == 0 {
@@ -159,6 +159,9 @@ func (cache1hRule) Run(in Input) (*Finding, error) {
 // cache1hRatio is how many times more the hour-long cache write costs than
 // the five-minute one, for a given model at a given moment. It returns 0
 // when the rate is unknown, which callers must treat as "no ratio to quote".
+//
+// The standard tier is enough: a fast or long-context tier multiplies both
+// write columns by the same factor, so the 1h-to-5m ratio does not move.
 func cache1hRatio(in Input, modelID string, at time.Time) float64 {
 	r, ok := in.Prices.LookupAt(modelID, at)
 	if !ok || r.CacheWrite5m <= 0 {

@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS turns (
 	ts              INTEGER,
 	model           TEXT,
 	effort          TEXT,
+	speed           TEXT NOT NULL DEFAULT '',
 	input           INTEGER,
 	cache_read      INTEGER,
 	cache_write_5m  INTEGER,
@@ -280,8 +281,8 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 	}
 
 	turnStmt, err := tx.Prepare(`
-		INSERT OR REPLACE INTO turns(session_id, id, ts, model, effort, input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars, compaction_before)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		INSERT OR REPLACE INTO turns(session_id, id, ts, model, effort, speed, input, cache_read, cache_write_5m, cache_write_1h, output, thinking, text_chars, compaction_before)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("store: prepare turn insert: %w", err)
 	}
@@ -309,7 +310,7 @@ func (s *Store) ReplaceTranscript(t *model.Transcript, size int64, mtime time.Ti
 			compactionBefore = 1
 		}
 		_, err = turnStmt.Exec(
-			newSessionID, turn.ID, toUnixNanos(turn.Timestamp), turn.Model, turn.Effort,
+			newSessionID, turn.ID, toUnixNanos(turn.Timestamp), turn.Model, turn.Effort, turn.Speed,
 			turn.Usage.Input, turn.Usage.CacheRead, turn.Usage.CacheWrite5m, turn.Usage.CacheWrite1h,
 			turn.Usage.Output, turn.Usage.Thinking, turn.TextChars, compactionBefore,
 		)
@@ -442,6 +443,12 @@ func migrate(db *sql.DB) error {
 		{"tool_calls", "class", `ALTER TABLE tool_calls ADD COLUMN class TEXT NOT NULL DEFAULT ''`},
 		{"tool_calls", "input_hash", `ALTER TABLE tool_calls ADD COLUMN input_hash TEXT NOT NULL DEFAULT ''`},
 		{"turns", "compaction_before", `ALTER TABLE turns ADD COLUMN compaction_before INTEGER NOT NULL DEFAULT 0`},
+		// Turns ingested before this column existed have no speed recorded.
+		// Adding any column clears the files table below, so the next ingest
+		// re-reads every transcript still on disk and backfills them; rows
+		// whose transcript is gone keep "" and price at the standard tier,
+		// which is the answer tallybook already gave them.
+		{"turns", "speed", `ALTER TABLE turns ADD COLUMN speed TEXT NOT NULL DEFAULT ''`},
 	} {
 		has, err := hasColumn(db, col.table, col.name)
 		if err != nil {
